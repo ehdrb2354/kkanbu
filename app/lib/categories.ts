@@ -39,11 +39,13 @@ export const CATEGORIES: Category[] = [
   { key: "billiards", label: "당구 / 포켓볼", icon: "🎱", group: "indoor" },
 
   // 미식 / 혼밥타파
-  { key: "gopchang", label: "곱창 · 대창 · 막창", icon: "🍖", group: "food" },
-  { key: "dakgalbi", label: "닭갈비 · 족발", icon: "🍗", group: "food" },
-  { key: "samgyeopsal", label: "삼겹살 · 고기구이", icon: "🥩", group: "food" },
-  { key: "izakaya", label: "이자카야 · 한잔", icon: "🍶", group: "food" },
-  { key: "buffet", label: "뷔페 · 샤브샤브", icon: "🍲", group: "food" },
+  { key: "korean", label: "한식", icon: "🍚", group: "food" },
+  { key: "chinese", label: "중식", icon: "🥡", group: "food" },
+  { key: "western", label: "양식", icon: "🍝", group: "food" },
+  { key: "japanese", label: "일식", icon: "🍣", group: "food" },
+  { key: "asian", label: "아시안", icon: "🍜", group: "food" },
+  { key: "mexican", label: "멕시칸", icon: "🌮", group: "food" },
+  { key: "cafe", label: "카페", icon: "☕", group: "food" },
 
   // 문화 / 기타
   { key: "exhibition", label: "전시회 관람", icon: "🖼️", group: "culture" },
