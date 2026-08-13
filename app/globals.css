@@ -830,6 +830,17 @@ button {
   color: var(--muted);
 }
 
+.loading-footer {
+  position: absolute;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.loading-footer strong {
+  color: var(--text);
+}
+
 @keyframes pulse-danger {
   0% { transform: scale(1); }
   50% { transform: scale(1.1); }
