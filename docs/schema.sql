@@ -6,10 +6,11 @@
 -- 매너 티어는 "번개 참여 횟수"와 "매너 점수" 둘 다 반영합니다 (한쪽만 높다고 오르지 않음).
 -- "참여 횟수"는 그냥 만들거나 참가만 해서는 안 오르고, 모임 종료 후 참가자끼리 매너평가를
 -- 주고받아야만(= 참가자들의 동의) 인정됩니다 (아래 manner_ratings 섹션의 recompute_participation 참고):
---   탐색자(신규)   : 참여 0~2회
---   깐부(보통)     : 참여 3회+ 그리고 매너점수 200+
---   번개대장(우수)  : 참여 10회+ 그리고 매너점수 400+
---   불꽃마스터(최고) : 참여 25회+ 그리고 매너점수 600+
+--   탐색자(신규)     : 참여 0~2회
+--   깐부(보통)       : 참여 3회+ 그리고 매너점수 200+
+--   번개대장(우수)    : 참여 10회+ 그리고 매너점수 400+
+--   불꽃마스터(최고)  : 참여 25회+ 그리고 매너점수 600+
+--   친화력 대장(왕중왕) : 참여 50회+ 그리고 매너점수 1000+
 -- (구간은 여기와 app/lib/mannerTier.ts 두 곳에 있으니 항상 같이 맞춰주세요)
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -44,10 +45,10 @@ language sql
 immutable
 set search_path = ''
 as $$
-  select (array['탐색자', '깐부', '번개대장', '불꽃마스터'])[
+  select (array['탐색자', '깐부', '번개대장', '불꽃마스터', '친화력 대장'])[
     least(
-      case when score >= 600 then 4 when score >= 400 then 3 when score >= 200 then 2 else 1 end,
-      case when meetup_count >= 25 then 4 when meetup_count >= 10 then 3 when meetup_count >= 3 then 2 else 1 end
+      case when score >= 1000 then 5 when score >= 600 then 4 when score >= 400 then 3 when score >= 200 then 2 else 1 end,
+      case when meetup_count >= 50 then 5 when meetup_count >= 25 then 4 when meetup_count >= 10 then 3 when meetup_count >= 3 then 2 else 1 end
     )
   ];
 $$;
