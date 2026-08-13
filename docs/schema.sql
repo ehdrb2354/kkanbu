@@ -3,7 +3,9 @@
 -- (이미 이전 버전을 실행한 적이 있다면 파일 맨 아래 "기존에 실행한 적이 있다면" 섹션을 보세요)
 
 -- ── profiles ──────────────────────────────────────────────
--- 매너 티어는 "번개 참여 횟수"와 "매너 점수" 둘 다 반영합니다 (한쪽만 높다고 오르지 않음):
+-- 매너 티어는 "번개 참여 횟수"와 "매너 점수" 둘 다 반영합니다 (한쪽만 높다고 오르지 않음).
+-- "참여 횟수"는 그냥 만들거나 참가만 해서는 안 오르고, 모임 종료 후 참가자끼리 매너평가를
+-- 주고받아야만(= 참가자들의 동의) 인정됩니다 (아래 manner_ratings 섹션의 recompute_participation 참고):
 --   탐색자(신규)   : 참여 0~2회
 --   깐부(보통)     : 참여 3회+ 그리고 매너점수 200+
 --   번개대장(우수)  : 참여 10회+ 그리고 매너점수 400+
@@ -172,60 +174,11 @@ create policy "본인만 나가기 가능"
   to authenticated
   using (auth.uid() = user_id);
 
--- 참가/나가기 시 meetups_joined_count와 tier를 함께 갱신
-create function public.on_participant_joined()
-returns trigger
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  updated_count int;
-  current_score int;
-begin
-  update public.profiles
-  set meetups_joined_count = meetups_joined_count + 1
-  where id = new.user_id
-  returning meetups_joined_count, manner_score into updated_count, current_score;
-
-  update public.profiles
-  set tier = public.compute_tier(current_score, updated_count)
-  where id = new.user_id;
-
-  return new;
-end;
-$$;
-
-create trigger on_meetup_participant_inserted
-  after insert on public.meetup_participants
-  for each row execute function public.on_participant_joined();
-
-create function public.on_participant_left()
-returns trigger
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  updated_count int;
-  current_score int;
-begin
-  update public.profiles
-  set meetups_joined_count = greatest(0, meetups_joined_count - 1)
-  where id = old.user_id
-  returning meetups_joined_count, manner_score into updated_count, current_score;
-
-  update public.profiles
-  set tier = public.compute_tier(current_score, updated_count)
-  where id = old.user_id;
-
-  return old;
-end;
-$$;
-
-create trigger on_meetup_participant_deleted
-  after delete on public.meetup_participants
-  for each row execute function public.on_participant_left();
+-- ⚠️ meetups_joined_count는 더 이상 "참가 신청(insert)" 시점에 올라가지 않습니다.
+-- 그냥 모임을 만들거나 참가만 해도 티어가 오르는 문제가 있어서, 아래 manner_ratings 섹션의
+-- recompute_participation()으로 옮겼습니다 — 모임이 끝난 뒤 참가자들끼리 매너평가를 주고받아야만
+-- (= "참가자들의 동의") 그 모임이 실제 참여로 인정됩니다. 정원 체크는 앱에서 실시간 인원수로 계산하므로
+-- meetup_participants insert/delete 자체에는 별도 트리거가 필요 없습니다.
 
 -- 방장이 매칭을 취소하면, 실제로는 열리지 않은 모임이므로 참가자 전원(방장 포함)의
 -- 참가 기록을 함께 지워서 meetups_joined_count/tier가 다시 원상복구되게 함
@@ -292,7 +245,37 @@ create policy "본인 명의로만 평가 등록 가능 (3인 이상 종료된 �
     ) >= 3
   );
 
--- 평가가 등록되면 대상자의 manner_score/tier에 자동 반영 (0 미만으로는 안 내려감)
+-- "참여 횟수(meetups_joined_count)"를 여기서 다시 계산합니다: 그냥 참가만 해서는 안 오르고,
+-- 모임이 끝난 뒤 참가자들끼리 매너평가를 주고받은(= 서로의 참여를 인정한) 모임 수만 셉니다.
+-- (평가를 주거나 받은 것 중 하나라도 있으면 그 모임은 "인정된 참여"로 집계)
+create function public.recompute_participation(target_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  new_count int;
+  current_score int;
+begin
+  select count(distinct meetup_id) into new_count
+  from (
+    select meetup_id from public.manner_ratings where rater_id = target_user_id
+    union
+    select meetup_id from public.manner_ratings where ratee_id = target_user_id
+  ) confirmed;
+
+  select manner_score into current_score from public.profiles where id = target_user_id;
+
+  update public.profiles
+  set meetups_joined_count = new_count,
+      tier = public.compute_tier(current_score, new_count)
+  where id = target_user_id;
+end;
+$$;
+
+-- 평가가 등록되면 대상자의 manner_score를 반영하고(0 미만으로는 안 내려감),
+-- 평가자/대상자 둘 다의 참여 횟수·티어를 다시 계산합니다.
 create function public.apply_manner_rating()
 returns trigger
 language plpgsql
@@ -301,16 +284,17 @@ set search_path = ''
 as $$
 declare
   updated_score int;
-  current_count int;
 begin
-  select greatest(0, manner_score + new.delta), meetups_joined_count
-  into updated_score, current_count
+  select greatest(0, manner_score + new.delta)
+  into updated_score
   from public.profiles where id = new.ratee_id;
 
   update public.profiles
-  set manner_score = updated_score,
-      tier = public.compute_tier(updated_score, current_count)
+  set manner_score = updated_score
   where id = new.ratee_id;
+
+  perform public.recompute_participation(new.ratee_id);
+  perform public.recompute_participation(new.rater_id);
 
   return new;
 end;
@@ -551,3 +535,53 @@ alter publication supabase_realtime add table public.meetup_messages;
 --
 -- 매칭 취소 시 참가자 전원의 참가 기록도 함께 지워지도록(만들고 취소만 해도 참여 횟수가 올라가던 문제 수정)
 -- 하려면, 위의 "meetup_participants" 트리거들 아래에 있는 cancel_meetup() 함수와 grant execute 줄을 추가로 실행하세요.
+--
+-- ⚠️ "그냥 참가만 해도(모임을 만들기만 해도) 티어가 오르는" 문제를 고치려면 아래를 순서대로 실행하세요.
+-- 이제 참여 횟수는 모임이 끝난 뒤 참가자끼리 매너평가를 주고받아야만("참가자들의 동의") 인정됩니다.
+--
+-- drop trigger if exists on_meetup_participant_inserted on public.meetup_participants;
+-- drop trigger if exists on_meetup_participant_deleted on public.meetup_participants;
+-- drop function if exists public.on_participant_joined();
+-- drop function if exists public.on_participant_left();
+--
+-- (위의 "manner_ratings" 섹션에 있는 recompute_participation() 함수와, 새로 바뀐
+--  apply_manner_rating() 함수(create function이 아니라 이미 있으므로 "create or replace function"으로
+--  실행하세요)를 추가/교체 실행)
+--
+-- create or replace function public.apply_manner_rating()
+-- returns trigger
+-- language plpgsql
+-- security definer
+-- set search_path = ''
+-- as $$
+-- declare
+--   updated_score int;
+-- begin
+--   select greatest(0, manner_score + new.delta)
+--   into updated_score
+--   from public.profiles where id = new.ratee_id;
+--
+--   update public.profiles
+--   set manner_score = updated_score
+--   where id = new.ratee_id;
+--
+--   perform public.recompute_participation(new.ratee_id);
+--   perform public.recompute_participation(new.rater_id);
+--
+--   return new;
+-- end;
+-- $$;
+--
+-- 마지막으로, 기존에 (버그로) 잘못 쌓여있던 참여 횟수를 실제 매너평가 기록 기준으로 한 번 보정하세요:
+--
+-- update public.profiles pr
+-- set meetups_joined_count = coalesce((
+--   select count(distinct meetup_id) from (
+--     select meetup_id from public.manner_ratings where rater_id = pr.id
+--     union
+--     select meetup_id from public.manner_ratings where ratee_id = pr.id
+--   ) t
+-- ), 0);
+--
+-- update public.profiles
+-- set tier = public.compute_tier(manner_score, meetups_joined_count);
