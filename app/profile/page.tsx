@@ -313,6 +313,12 @@ export default function ProfilePage() {
           🛠 신고 관리
         </Link>
       )}
+
+      {isAdmin && (
+        <Link href="/admin/analytics" className="btn btn-outline" style={{ width: "100%", marginTop: "10px" }}>
+          📊 카테고리 통계
+        </Link>
+      )}
     </main>
   );
 }
