@@ -18,6 +18,8 @@ create table public.profiles (
   meetups_joined_count int not null default 0,
   tier text not null default '탐색자',
   terms_agreed_at timestamptz, -- 이용약관 동의 시각 (온보딩에서 채워짐)
+  is_admin boolean not null default false, -- 신고 검토/제재 권한이 있는 운영자 계정 표시
+  suspended_until timestamptz, -- 이 시각까지는 모임 생성/참가 불가 (관리자 제재로만 설정됨)
   created_at timestamptz not null default now()
 );
 
@@ -125,7 +127,13 @@ create policy "매칭은 로그인 유저 누구나 조회 가능"
 create policy "본인 명의로만 매칭 생성 가능"
   on public.meetups for insert
   to authenticated
-  with check (auth.uid() = host_id);
+  with check (
+    auth.uid() = host_id
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.suspended_until > now()
+    )
+  );
 
 create policy "방장만 매칭 수정 가능"
   on public.meetups for update
@@ -151,7 +159,13 @@ create policy "참가자 목록은 로그인 유저 누구나 조회 가능"
 create policy "본인 명의로만 참가 가능"
   on public.meetup_participants for insert
   to authenticated
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.suspended_until > now()
+    )
+  );
 
 create policy "본인만 나가기 가능"
   on public.meetup_participants for delete
@@ -364,7 +378,19 @@ create policy "본인 명의로만 신고 등록 가능"
   to authenticated
   with check (auth.uid() = reporter_id);
 
--- 운영자용: 대상별 신고 누적 현황 (지금은 앱 UI 없이 Supabase Table Editor/SQL Editor에서 직접 확인)
+-- 운영자(is_admin)는 모든 신고를 조회/상태 변경할 수 있음 (앱의 /admin/reports 화면에서 사용)
+create policy "관리자는 모든 신고 조회 가능"
+  on public.reports for select
+  to authenticated
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
+create policy "관리자는 신고 상태를 변경할 수 있음"
+  on public.reports for update
+  to authenticated
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin))
+  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
+-- 운영자용: 대상별 신고 누적 현황
 -- select * from public.report_summary order by report_count desc;
 create view public.report_summary as
 select
@@ -375,6 +401,49 @@ select
   max(created_at) as last_reported_at
 from public.reports
 group by target_type, target_id;
+
+-- 관리자가 "제재 적용"을 누르면 실행되는 함수: 신고 대상 유저에게 매너점수 -30점 + 24시간 활동정지,
+-- 모임 신고면 해당 모임을 강제 마감. 함수 안에서 is_admin을 직접 검증하므로 관리자가 아니면 실행 자체가 막힘.
+create function public.apply_report_sanction(report_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_is_admin boolean;
+  v_target_type text;
+  v_target_id uuid;
+  v_new_score int;
+  v_meetup_count int;
+begin
+  select is_admin into caller_is_admin from public.profiles where id = auth.uid();
+  if not coalesce(caller_is_admin, false) then
+    raise exception '관리자만 제재를 적용할 수 있어요';
+  end if;
+
+  select target_type, target_id into v_target_type, v_target_id
+  from public.reports where id = report_id;
+
+  if v_target_type = 'user' then
+    select greatest(0, manner_score - 30), meetups_joined_count
+    into v_new_score, v_meetup_count
+    from public.profiles where id = v_target_id;
+
+    update public.profiles
+    set manner_score = v_new_score,
+        tier = public.compute_tier(v_new_score, v_meetup_count),
+        suspended_until = greatest(coalesce(suspended_until, now()), now()) + interval '24 hours'
+    where id = v_target_id;
+  elsif v_target_type = 'meetup' then
+    update public.meetups set status = 'closed' where id = v_target_id;
+  end if;
+
+  update public.reports set status = 'actioned' where id = report_id;
+end;
+$$;
+
+grant execute on function public.apply_report_sanction(uuid) to authenticated;
 
 -- ── Realtime: 참가자 수 / 채팅 실시간 반영 ─────────────────
 alter publication supabase_realtime add table public.meetups;
@@ -434,3 +503,21 @@ alter publication supabase_realtime add table public.meetup_messages;
 -- manner_ratings에 한줄 후기(comment) 컬럼이 없다면 아래 한 줄만 추가로 실행하세요:
 --
 -- alter table public.manner_ratings add column if not exists comment text not null default '';
+--
+-- 관리자(신고 검토/제재) 기능을 새로 추가하는 경우, 아래를 순서대로 추가로 실행하세요:
+--
+-- alter table public.profiles add column if not exists is_admin boolean not null default false;
+-- alter table public.profiles add column if not exists suspended_until timestamptz;
+--
+-- drop policy if exists "본인 명의로만 매칭 생성 가능" on public.meetups;
+-- (위의 "meetups" 섹션에 있는 새 create policy "본인 명의로만 매칭 생성 가능" 을 실행 — 정지 여부 체크 추가됨)
+--
+-- drop policy if exists "본인 명의로만 참가 가능" on public.meetup_participants;
+-- (위의 "meetup_participants" 섹션에 있는 새 create policy "본인 명의로만 참가 가능" 을 실행 — 정지 여부 체크 추가됨)
+--
+-- (위의 "reports" 섹션에 있는 "관리자는 모든 신고 조회 가능" / "관리자는 신고 상태를 변경할 수 있음" 정책과
+--  apply_report_sanction() 함수, grant execute 줄을 추가로 실행)
+--
+-- 마지막으로, 운영자로 지정할 계정을 본인 이메일로 지정하세요:
+-- update public.profiles set is_admin = true
+-- where id = (select id from auth.users where email = '운영자로 쓸 계정의 이메일');

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 import { CATEGORIES, getCategory } from "../../lib/categories";
 import { loadKakaoMaps } from "../../lib/kakao";
+import { isSuspended, formatSuspensionRemaining } from "../../lib/suspension";
 
 const DEFAULT_CENTER = { lat: 35.1796, lng: 129.0756 };
 
@@ -52,6 +53,20 @@ function NewMeetupForm() {
   const [mapPickerError, setMapPickerError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [suspendedUntil, setSuspendedUntil] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("suspended_until")
+        .eq("id", data.user.id)
+        .single();
+      setSuspendedUntil(profile?.suspended_until ?? null);
+    });
+  }, []);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -174,6 +189,22 @@ function NewMeetupForm() {
     await supabase.from("meetup_participants").insert({ meetup_id: meetup.id, user_id: user.id });
 
     router.push(`/meetup/${meetup.id}`);
+  }
+
+  if (isSuspended(suspendedUntil)) {
+    return (
+      <main className="container" style={{ paddingTop: "40px" }}>
+        <div className="card" style={{ textAlign: "center" }}>
+          <p style={{ fontSize: "32px" }}>🚫</p>
+          <p style={{ fontWeight: 800, marginTop: "8px" }}>지금은 모임을 만들 수 없어요</p>
+          <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "8px" }}>
+            신고 접수에 따른 제재로 활동이 잠시 제한됐어요.
+            <br />
+            {formatSuspensionRemaining(suspendedUntil as string)} 후에 다시 이용할 수 있어요.
+          </p>
+        </div>
+      </main>
+    );
   }
 
   return (

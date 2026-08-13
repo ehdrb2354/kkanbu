@@ -10,6 +10,7 @@ import ParticipantAvatar from "../../components/ParticipantAvatar";
 import ReportButton from "../../components/ReportButton";
 import MannerRatingModal from "../../components/MannerRatingModal";
 import { getChatDestroyAt, formatCountdown } from "../../lib/chatLifecycle";
+import { isSuspended, formatSuspensionRemaining } from "../../lib/suspension";
 
 type Participant = {
   userId: string;
@@ -42,6 +43,7 @@ export default function MeetupDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ratingTarget, setRatingTarget] = useState<Participant | null>(null);
+  const [mySuspendedUntil, setMySuspendedUntil] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -86,6 +88,13 @@ export default function MeetupDetailPage() {
         .eq("meetup_id", params.id)
         .eq("rater_id", currentUserId);
       setMyRatedIds((ratings ?? []).map((r) => r.ratee_id));
+
+      const { data: myProfile } = await supabase
+        .from("profiles")
+        .select("suspended_until")
+        .eq("id", currentUserId)
+        .single();
+      setMySuspendedUntil(myProfile?.suspended_until ?? null);
     }
 
     setLoading(false);
@@ -218,9 +227,21 @@ export default function MeetupDetailPage() {
 
         {error && <p style={{ color: "var(--danger)", fontSize: "13px", marginTop: "10px" }}>{error}</p>}
 
+        {isSuspended(mySuspendedUntil) && !isParticipant && (
+          <p style={{ fontSize: "12px", color: "var(--danger)", marginTop: "10px" }}>
+            🚫 신고 접수에 따른 제재로 활동이 제한됐어요. {formatSuspensionRemaining(mySuspendedUntil as string)} 후에
+            참가할 수 있어요.
+          </p>
+        )}
+
         <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
           {!isHost && isOpen && !isPast && !isParticipant && (
-            <button className="btn btn-primary" disabled={busy || isFull} onClick={handleJoin} style={{ flex: 1 }}>
+            <button
+              className="btn btn-primary"
+              disabled={busy || isFull || isSuspended(mySuspendedUntil)}
+              onClick={handleJoin}
+              style={{ flex: 1 }}
+            >
               {isFull ? "모집 완료" : "📷 깐부 하기 (참가 신청)"}
             </button>
           )}

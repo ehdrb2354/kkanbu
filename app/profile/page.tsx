@@ -34,6 +34,7 @@ export default function ProfilePage() {
   const [buddiesMet, setBuddiesMet] = useState(0);
   const [badges, setBadges] = useState<EarnedBadge[]>([]);
   const [positiveRatings, setPositiveRatings] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -47,7 +48,7 @@ export default function ProfilePage() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("nickname, bio, avatar, manner_score, meetups_joined_count")
+      .select("nickname, bio, avatar, manner_score, meetups_joined_count, is_admin")
       .eq("id", user.id)
       .single();
     if (profile) {
@@ -58,6 +59,7 @@ export default function ProfilePage() {
       setAvatarUrl(profile.avatar ?? null);
       setScore(profile.manner_score);
       setMeetupsJoined(profile.meetups_joined_count);
+      setIsAdmin(profile.is_admin ?? false);
     }
 
     const { data: myMeetupRows } = await supabase
@@ -305,6 +307,12 @@ export default function ProfilePage() {
       <Link href="/my-meetups" className="btn btn-outline" style={{ width: "100%", marginTop: "16px" }}>
         🙋 내가 만든/참여한 모임 이력
       </Link>
+
+      {isAdmin && (
+        <Link href="/admin/reports" className="btn btn-outline" style={{ width: "100%", marginTop: "10px" }}>
+          🛠 신고 관리
+        </Link>
+      )}
     </main>
   );
 }
