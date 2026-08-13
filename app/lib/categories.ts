@@ -28,6 +28,7 @@ export const CATEGORIES: Category[] = [
   { key: "jokgu", label: "족구", icon: "🏐", group: "outdoor" },
   { key: "cycling", label: "자전거 라이딩", icon: "🚴", group: "outdoor" },
   { key: "climbing", label: "클라이밍", icon: "🧗", group: "outdoor" },
+  { key: "fishing", label: "낚시", icon: "🎣", group: "outdoor" },
 
   // 실내 액티비티
   { key: "boardgame", label: "보드게임", icon: "🎲", group: "indoor" },
@@ -49,6 +50,7 @@ export const CATEGORIES: Category[] = [
   { key: "movie", label: "영화", icon: "🎬", group: "culture" },
   { key: "shopping", label: "쇼핑", icon: "🛍️", group: "culture" },
   { key: "study", label: "스터디 · 카공", icon: "📚", group: "culture" },
+  { key: "etc", label: "기타", icon: "✨", group: "culture" },
 ];
 
 export function getCategory(key: string): Category | undefined {

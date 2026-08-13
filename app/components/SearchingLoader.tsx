@@ -9,7 +9,7 @@ export default function SearchingLoader({ message = "내 주변 깐부 탐색 �
   return (
     <div className="loading-screen">
       <div className="pulse">
-        <Image src="/icon-192.png" alt="" width={96} height={96} style={{ borderRadius: "22px" }} />
+        <Image src="/icon-192.png?v=2" alt="" width={96} height={96} style={{ borderRadius: "22px" }} />
       </div>
       <p className="loading-text">{message}</p>
       <p className="loading-footer">

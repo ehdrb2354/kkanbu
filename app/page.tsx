@@ -9,6 +9,14 @@ import CategoryFilterSheet from "./components/CategoryFilterSheet";
 import { loadKakaoMaps } from "./lib/kakao";
 import { distanceKm, formatDistance } from "./lib/geo";
 
+type SearchPlace = {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+};
+
 type MeetupMarker = {
   id: string;
   title: string;
@@ -41,6 +49,9 @@ export default function HomeMapPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchPlace[]>([]);
+  const [searchMarker, setSearchMarker] = useState<SearchPlace | null>(null);
+  const searchMarkerOverlayRef = useRef<any>(null);
   const [meetups, setMeetups] = useState<MeetupMarker[]>([]);
   const [activeMeetup, setActiveMeetup] = useState<MeetupMarker | null>(null);
 
@@ -111,6 +122,16 @@ export default function HomeMapPage() {
     );
   }
 
+  function goToPlace(place: SearchPlace) {
+    setSearchMarker(place);
+    setActiveMeetup(null);
+    setSearchResults([]);
+    if (mapRef.current) {
+      mapRef.current.setCenter(new window.kakao.maps.LatLng(place.lat, place.lng));
+      mapRef.current.setLevel(4);
+    }
+  }
+
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
     const query = searchQuery.trim();
@@ -123,12 +144,22 @@ export default function HomeMapPage() {
 
     setSearching(true);
     setSearchError(null);
+    setSearchResults([]);
     placesRef.current.keywordSearch(query, (results: any[], status: string) => {
       setSearching(false);
       if (status === kakao.maps.services.Status.OK && results.length > 0) {
-        const place = results[0];
-        mapRef.current.setCenter(new kakao.maps.LatLng(Number(place.y), Number(place.x)));
-        mapRef.current.setLevel(4);
+        const places: SearchPlace[] = results.slice(0, 8).map((r) => ({
+          id: r.id,
+          name: r.place_name,
+          address: r.road_address_name || r.address_name,
+          lat: Number(r.y),
+          lng: Number(r.x),
+        }));
+        if (places.length === 1) {
+          goToPlace(places[0]);
+        } else {
+          setSearchResults(places);
+        }
       } else {
         setSearchError("검색 결과가 없어요.");
       }
@@ -206,7 +237,10 @@ export default function HomeMapPage() {
       const pin = document.createElement("div");
       pin.className = "kakao-marker-pin";
       pin.innerHTML = `<div class="kakao-marker-badge">${category?.icon ?? "📍"}</div><div class="kakao-marker-tail"></div>`;
-      pin.addEventListener("click", () => setActiveMeetup(m));
+      pin.addEventListener("click", () => {
+        setActiveMeetup(m);
+        setSearchMarker(null);
+      });
 
       const overlay = new kakao.maps.CustomOverlay({
         position: new kakao.maps.LatLng(m.location_lat, m.location_lng),
@@ -231,13 +265,36 @@ export default function HomeMapPage() {
     }
   }, [meetups, mapReady, myLocation]);
 
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const kakao = window.kakao;
+
+    if (searchMarkerOverlayRef.current) {
+      searchMarkerOverlayRef.current.setMap(null);
+      searchMarkerOverlayRef.current = null;
+    }
+
+    if (searchMarker) {
+      const pin = document.createElement("div");
+      pin.className = "kakao-marker-search-pin";
+      pin.innerHTML = `<div class="kakao-marker-search-badge">🔍</div><div class="kakao-marker-search-tail"></div>`;
+      const overlay = new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(searchMarker.lat, searchMarker.lng),
+        content: pin,
+        yAnchor: 1,
+      });
+      overlay.setMap(mapRef.current);
+      searchMarkerOverlayRef.current = overlay;
+    }
+  }, [searchMarker, mapReady]);
+
   const selectedLabel = selectedCategory ? getCategory(selectedCategory)?.label ?? "전체" : "전체";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 76px)" }}>
       <div className="map-header">
         <div className="map-header-brand">
-          <Image src="/icon-192.png" alt="" width={32} height={32} style={{ borderRadius: "9px" }} />
+          <Image src="/icon-192.png?v=2" alt="" width={32} height={32} style={{ borderRadius: "9px" }} />
           <span className="map-header-title">깐부</span>
         </div>
         <span className="map-header-tagline">Find your local friends</span>
@@ -251,13 +308,27 @@ export default function HomeMapPage() {
           </svg>
           <input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (searchResults.length > 0) setSearchResults([]);
+              if (searchError) setSearchError(null);
+            }}
             placeholder="장소를 검색해보세요 (예: 해운대, 강남역)"
             enterKeyHint="search"
           />
           {searching && <span className="map-search-status">검색 중...</span>}
         </form>
         {searchError && <p className="map-search-error">{searchError}</p>}
+        {searchResults.length > 0 && (
+          <div className="map-search-results">
+            {searchResults.map((place) => (
+              <button key={place.id} className="map-search-result-item" onClick={() => goToPlace(place)}>
+                <p className="map-search-result-name">{place.name}</p>
+                <p className="map-search-result-address">{place.address}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {locationDenied && !mapError && (
@@ -304,6 +375,27 @@ export default function HomeMapPage() {
           <div className="map-container" ref={mapContainerRef} />
         )}
 
+        {searchMarker && !activeMeetup && (
+          <div className="map-info-card">
+            <button
+              onClick={() => setSearchMarker(null)}
+              style={{
+                position: "absolute",
+                top: "10px",
+                right: "14px",
+                background: "none",
+                border: "none",
+                fontSize: "16px",
+                color: "var(--muted)",
+              }}
+            >
+              ✕
+            </button>
+            <p style={{ fontWeight: 800, fontSize: "15px" }}>🔍 {searchMarker.name}</p>
+            <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "6px" }}>📍 {searchMarker.address}</p>
+          </div>
+        )}
+
         {activeMeetup && (
           <div className="map-info-card">
             <button
@@ -344,7 +436,7 @@ export default function HomeMapPage() {
           </div>
         )}
 
-        {!activeMeetup && !mapError && (
+        {!activeMeetup && !searchMarker && !mapError && (
           <Link href={`/meetup/new${selectedCategory ? `?category=${selectedCategory}` : ""}`} className="map-fab">
             +
           </Link>

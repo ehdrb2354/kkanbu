@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   description:
     "혼자 하기 애매한 취미를 같이 할 진짜 내 편을 지금 이 시간, 이 장소에서 지도로 바로 찾아주는 매칭 앱",
   icons: {
-    icon: "/icon-192.png",
-    apple: "/apple-touch-icon.png",
+    icon: "/icon-192.png?v=2",
+    apple: "/apple-touch-icon.png?v=2",
   },
   appleWebApp: {
     capable: true,

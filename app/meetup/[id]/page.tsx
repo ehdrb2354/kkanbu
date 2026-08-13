@@ -141,8 +141,10 @@ export default function MeetupDetailPage() {
 
   async function handleCancel() {
     setBusy(true);
+    setError(null);
     const supabase = createClient();
-    await supabase.from("meetups").update({ status: "closed" }).eq("id", params.id);
+    const { error: cancelError } = await supabase.rpc("cancel_meetup", { target_meetup_id: params.id });
+    if (cancelError) setError("취소에 실패했어요.");
     setBusy(false);
     load();
   }

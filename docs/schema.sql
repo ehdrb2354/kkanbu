@@ -227,6 +227,33 @@ create trigger on_meetup_participant_deleted
   after delete on public.meetup_participants
   for each row execute function public.on_participant_left();
 
+-- 방장이 매칭을 취소하면, 실제로는 열리지 않은 모임이므로 참가자 전원(방장 포함)의
+-- 참가 기록을 함께 지워서 meetups_joined_count/tier가 다시 원상복구되게 함
+-- (그냥 만들고 취소만 해도 "참여 횟수"가 올라가던 문제 방지). security definer로 방장 검증 후
+-- meetup_participants를 삭제하므로, 참가자 개개인의 "본인만 나가기 가능" 정책을 우회할 필요가 없음.
+create function public.cancel_meetup(target_meetup_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_is_host boolean;
+begin
+  select (host_id = auth.uid()) into caller_is_host
+  from public.meetups where id = target_meetup_id;
+
+  if not coalesce(caller_is_host, false) then
+    raise exception '방장만 매칭을 취소할 수 있어요';
+  end if;
+
+  delete from public.meetup_participants where meetup_id = target_meetup_id;
+  update public.meetups set status = 'closed' where id = target_meetup_id;
+end;
+$$;
+
+grant execute on function public.cancel_meetup(uuid) to authenticated;
+
 -- ── manner_ratings (매너 평가) ────────────────────────────
 create table public.manner_ratings (
   id uuid primary key default gen_random_uuid(),
@@ -521,3 +548,6 @@ alter publication supabase_realtime add table public.meetup_messages;
 -- 마지막으로, 운영자로 지정할 계정을 본인 이메일로 지정하세요:
 -- update public.profiles set is_admin = true
 -- where id = (select id from auth.users where email = '운영자로 쓸 계정의 이메일');
+--
+-- 매칭 취소 시 참가자 전원의 참가 기록도 함께 지워지도록(만들고 취소만 해도 참여 횟수가 올라가던 문제 수정)
+-- 하려면, 위의 "meetup_participants" 트리거들 아래에 있는 cancel_meetup() 함수와 grant execute 줄을 추가로 실행하세요.

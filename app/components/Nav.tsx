@@ -25,7 +25,7 @@ export default function Nav() {
       {!hasOwnHeader && (
         <header className="top-bar">
           <Link href="/" className="brand">
-            <Image src="/icon-192.png" alt="" width={28} height={28} style={{ borderRadius: "8px" }} />
+            <Image src="/icon-192.png?v=2" alt="" width={28} height={28} style={{ borderRadius: "8px" }} />
             <span>깐부</span>
           </Link>
         </header>

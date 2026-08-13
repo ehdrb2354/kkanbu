@@ -25,7 +25,7 @@ function LoginButtons() {
     <main className="container" style={{ paddingTop: "80px" }}>
       <div style={{ textAlign: "center", marginBottom: "36px" }}>
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <Image src="/icon-192.png" alt="깐부" width={88} height={88} style={{ borderRadius: "22px" }} />
+          <Image src="/icon-192.png?v=2" alt="깐부" width={88} height={88} style={{ borderRadius: "22px" }} />
         </div>
         <div style={{ fontSize: "28px", fontWeight: 800, color: "var(--primary-dark)", marginTop: "12px" }}>깐부</div>
         <p style={{ color: "var(--muted)", fontSize: "14px", marginTop: "8px" }}>

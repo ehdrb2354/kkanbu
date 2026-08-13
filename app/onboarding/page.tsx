@@ -100,7 +100,7 @@ export default function OnboardingPage() {
     <main className="container" style={{ paddingTop: "48px" }}>
       <div style={{ textAlign: "center", marginBottom: "24px" }}>
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <Image src="/icon-192.png" alt="깐부" width={72} height={72} style={{ borderRadius: "18px" }} />
+          <Image src="/icon-192.png?v=2" alt="깐부" width={72} height={72} style={{ borderRadius: "18px" }} />
         </div>
         <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--primary-dark)", marginTop: "10px" }}>깐부</div>
         <p style={{ color: "var(--muted)", fontSize: "14px", marginTop: "6px" }}>
