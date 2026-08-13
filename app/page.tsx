@@ -32,6 +32,7 @@ export default function HomeMapPage() {
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,18 +54,26 @@ export default function HomeMapPage() {
             level: 5,
           });
           mapRef.current = map;
-          setMyLocation(center);
           setMapReady(true);
         };
 
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
-            (pos) => proceed({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-            () => proceed(DEFAULT_CENTER),
+            (pos) => {
+              const center = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+              proceed(center);
+              setMyLocation(center);
+              setLocationDenied(false);
+            },
+            () => {
+              proceed(DEFAULT_CENTER);
+              setLocationDenied(true);
+            },
             { timeout: 5000 }
           );
         } else {
           proceed(DEFAULT_CENTER);
+          setLocationDenied(true);
         }
       })
       .catch((err) => setMapError(err instanceof Error ? err.message : "지도를 불러오지 못했어요."));
@@ -73,6 +82,22 @@ export default function HomeMapPage() {
       cancelled = true;
     };
   }, []);
+
+  function retryLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const center = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setMyLocation(center);
+        setLocationDenied(false);
+        if (mapRef.current) {
+          mapRef.current.setCenter(new window.kakao.maps.LatLng(center.lat, center.lng));
+        }
+      },
+      () => setLocationDenied(true),
+      { timeout: 5000 }
+    );
+  }
 
   const loadMeetups = useCallback(async () => {
     const supabase = createClient();
@@ -203,6 +228,18 @@ export default function HomeMapPage() {
           />
         </div>
       </div>
+
+      {locationDenied && !mapError && (
+        <div className="location-denied-banner">
+          <div>
+            <p>📍 위치 권한이 꺼져 있어서 기본 위치로 보여주고 있어요.</p>
+            <p className="location-denied-hint">
+              계속 안 되면 주소창의 자물쇠 아이콘 → 위치 권한을 허용으로 바꾼 뒤 새로고침 해주세요.
+            </p>
+          </div>
+          <button onClick={retryLocation}>다시 시도</button>
+        </div>
+      )}
 
       <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
         <div className="map-filter-bar">

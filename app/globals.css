@@ -601,6 +601,37 @@ button {
   color: var(--danger);
 }
 
+.location-denied-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  font-size: 12px;
+}
+
+.location-denied-banner p {
+  margin: 0;
+}
+
+.location-denied-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.location-denied-banner button {
+  flex-shrink: 0;
+  background: var(--primary-dark);
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .rating-slider {
   flex: 1;
   accent-color: var(--primary-dark);
