@@ -7,6 +7,7 @@ import { createClient } from "../../lib/supabase/client";
 import { getCategory } from "../../lib/categories";
 import { getMannerTier } from "../../lib/mannerTier";
 import ParticipantAvatar from "../../components/ParticipantAvatar";
+import ReportButton from "../../components/ReportButton";
 import { getChatDestroyAt, formatCountdown } from "../../lib/chatLifecycle";
 
 type Participant = {
@@ -172,6 +173,9 @@ export default function MeetupDetailPage() {
           ‹
         </button>
         <p className="detail-header-title">모임 상세 화면</p>
+        <div style={{ marginLeft: "auto" }}>
+          <ReportButton targetType="meetup" targetId={meetup.id} targetLabel={meetup.title} label="🚩 신고" />
+        </div>
       </div>
 
       <div className="meetup-banner">
@@ -276,29 +280,34 @@ export default function MeetupDetailPage() {
                     <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
                   </div>
                 </div>
-                {isPast && isParticipant && !isSelf && (
-                  alreadyRated ? (
-                    <span style={{ fontSize: "12px", color: "var(--muted)" }}>평가완료</span>
-                  ) : (
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <button
-                        className="btn btn-safe"
-                        style={{ padding: "6px 10px", fontSize: "12px" }}
-                        disabled={busy}
-                        onClick={() => handleRate(p.userId, 10)}
-                      >
-                        👍
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        style={{ padding: "6px 10px", fontSize: "12px" }}
-                        disabled={busy}
-                        onClick={() => handleRate(p.userId, -15)}
-                      >
-                        👎
-                      </button>
-                    </div>
-                  )
+                {!isSelf && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    {isPast && isParticipant && (
+                      alreadyRated ? (
+                        <span style={{ fontSize: "12px", color: "var(--muted)" }}>평가완료</span>
+                      ) : (
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button
+                            className="btn btn-safe"
+                            style={{ padding: "6px 10px", fontSize: "12px" }}
+                            disabled={busy}
+                            onClick={() => handleRate(p.userId, 10)}
+                          >
+                            👍
+                          </button>
+                          <button
+                            className="btn btn-danger"
+                            style={{ padding: "6px 10px", fontSize: "12px" }}
+                            disabled={busy}
+                            onClick={() => handleRate(p.userId, -15)}
+                          >
+                            👎
+                          </button>
+                        </div>
+                      )
+                    )}
+                    <ReportButton targetType="user" targetId={p.userId} targetLabel={p.nickname} compact />
+                  </div>
                 )}
               </div>
             );

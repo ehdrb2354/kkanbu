@@ -582,14 +582,32 @@ button {
   white-space: nowrap;
 }
 
-.chat-menu-popover a {
+.chat-menu-popover a,
+.chat-menu-popover button {
   display: block;
+  width: 100%;
+  text-align: left;
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
   color: var(--text);
   border-radius: 8px;
+  background: none;
+  border: none;
+}
+
+.chat-menu-popover button:last-child {
+  color: var(--danger);
+}
+
+.report-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
 }
 
 .chat-toast {

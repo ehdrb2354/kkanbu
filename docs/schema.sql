@@ -325,6 +325,44 @@ group by pr.id;
 -- select tag, count(*) from public.manner_ratings, unnest(tags) as tag
 -- where ratee_id = '조회할 유저 id' group by tag order by count(*) desc;
 
+-- ── reports (신고) ────────────────────────────────────────
+-- target_type/target_id로 유저·모임·채팅메시지를 폭넓게 신고할 수 있게 함 (외래키 대신 앱 코드에서 유효성 보장).
+create table public.reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles (id),
+  target_type text not null check (target_type in ('user', 'meetup', 'message')),
+  target_id uuid not null,
+  reason text not null check (reason in ('inappropriate', 'abuse', 'spam', 'other')),
+  detail text not null default '',
+  status text not null default 'pending', -- 'pending' | 'reviewed' | 'dismissed' | 'actioned' (운영자가 처리하며 갱신)
+  created_at timestamptz not null default now(),
+  check (target_type <> 'user' or reporter_id <> target_id) -- 본인 신고 방지
+);
+
+alter table public.reports enable row level security;
+
+create policy "본인이 신고한 내역만 조회 가능"
+  on public.reports for select
+  to authenticated
+  using (auth.uid() = reporter_id);
+
+create policy "본인 명의로만 신고 등록 가능"
+  on public.reports for insert
+  to authenticated
+  with check (auth.uid() = reporter_id);
+
+-- 운영자용: 대상별 신고 누적 현황 (지금은 앱 UI 없이 Supabase Table Editor/SQL Editor에서 직접 확인)
+-- select * from public.report_summary order by report_count desc;
+create view public.report_summary as
+select
+  target_type,
+  target_id,
+  count(*) as report_count,
+  array_agg(distinct reason) as reasons,
+  max(created_at) as last_reported_at
+from public.reports
+group by target_type, target_id;
+
 -- ── Realtime: 참가자 수 / 채팅 실시간 반영 ─────────────────
 alter publication supabase_realtime add table public.meetups;
 alter publication supabase_realtime add table public.meetup_participants;
@@ -369,3 +407,7 @@ alter publication supabase_realtime add table public.meetup_messages;
 --
 -- (테스트 계정을 지우고 싶다면 Authentication → Users에서 직접 삭제하세요.
 --  profiles는 auth.users를 on delete cascade로 참조하므로 유저를 지우면 같이 삭제됩니다.)
+--
+-- ⚠️ 이제 실제 가입 유저/모임 데이터가 쌓여있을 수 있으니, 위 "전체 삭제 후 재실행"은 더 이상 권장하지 않아요.
+-- reports(신고) 기능만 새로 추가하는 경우라면, 위의 "reports" create table ~ "report_summary" 뷰
+-- 부분만 골라서 SQL Editor에 추가로 실행하면 기존 데이터에 영향 없이 반영돼요.

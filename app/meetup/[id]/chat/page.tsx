@@ -7,6 +7,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { getCategory } from "../../../lib/categories";
 import { getMannerTier } from "../../../lib/mannerTier";
 import ParticipantAvatar from "../../../components/ParticipantAvatar";
+import ReportButton from "../../../components/ReportButton";
 import { getChatDestroyAt, formatHMS } from "../../../lib/chatLifecycle";
 
 type Message = {
@@ -280,10 +281,17 @@ export default function MeetupChatPage() {
             ☰
           </button>
           {menuOpen && (
-            <div className="chat-menu-popover">
+            <div className="chat-menu-popover" onClick={() => setMenuOpen(false)}>
               <Link href={`/meetup/${params.id}`} onClick={() => setMenuOpen(false)}>
                 📋 매칭 상세보기
               </Link>
+              <ReportButton
+                targetType="meetup"
+                targetId={params.id}
+                targetLabel={meetup.title}
+                label="🚩 이 모임 신고하기"
+                className=""
+              />
             </div>
           )}
         </div>
@@ -296,15 +304,21 @@ export default function MeetupChatPage() {
           {memberList.map(([uid, p]) => {
             const tier = getMannerTier(p.score, p.meetupsJoined);
             return (
-              <div key={uid} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 0" }}>
-                <ParticipantAvatar avatarUrl={p.avatarUrl} tier={tier} size={40} />
-                <div>
-                  <p style={{ fontWeight: 700 }}>
-                    {p.nickname}
-                    {uid === userId ? " (나)" : ""}
-                  </p>
-                  <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
+              <div
+                key={uid}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "8px 0" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <ParticipantAvatar avatarUrl={p.avatarUrl} tier={tier} size={40} />
+                  <div>
+                    <p style={{ fontWeight: 700 }}>
+                      {p.nickname}
+                      {uid === userId ? " (나)" : ""}
+                    </p>
+                    <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
+                  </div>
                 </div>
+                {uid !== userId && <ReportButton targetType="user" targetId={uid} targetLabel={p.nickname} compact />}
               </div>
             );
           })}
@@ -339,7 +353,10 @@ export default function MeetupChatPage() {
                     </div>
                     <div>
                       <span className="chat-sender">{sender?.nickname ?? "알 수 없음"}</span>
-                      <div className="chat-bubble">{m.content}</div>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: "6px" }}>
+                        <div className="chat-bubble">{m.content}</div>
+                        <ReportButton targetType="message" targetId={m.id} targetLabel={`${sender?.nickname ?? "알 수 없음"}의 메시지`} compact />
+                      </div>
                     </div>
                   </div>
                 )}
