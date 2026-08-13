@@ -1,6 +1,6 @@
-const CACHE_VERSION = "v2";
-const CACHE_NAME = `heatguard-${CACHE_VERSION}`;
-const PRECACHE_URLS = ["/", "/about", "/guardian", "/today"];
+const CACHE_VERSION = "v1";
+const CACHE_NAME = `kkanbu-${CACHE_VERSION}`;
+const PRECACHE_URLS = ["/", "/login", "/nearby", "/chats", "/profile"];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
