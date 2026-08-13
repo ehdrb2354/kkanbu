@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 import { getCategory } from "../../lib/categories";
 import { getMannerTier } from "../../lib/mannerTier";
 import ParticipantAvatar from "../../components/ParticipantAvatar";
-import { getChatDestroyAt } from "../../lib/chatLifecycle";
+import { getChatDestroyAt, formatCountdown } from "../../lib/chatLifecycle";
 
 type Participant = {
   userId: string;
@@ -31,6 +31,7 @@ type MeetupDetail = {
 
 export default function MeetupDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [meetup, setMeetup] = useState<MeetupDetail | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [myRatedIds, setMyRatedIds] = useState<string[]>([]);
@@ -165,14 +166,19 @@ export default function MeetupDetailPage() {
   const hostTier = host ? getMannerTier(host.score, host.meetupsJoined) : null;
 
   return (
-    <main className="container" style={{ paddingTop: "24px" }}>
-      {category && (
-        <Link href={`/category/${category.key}`} style={{ fontSize: "13px", color: "var(--muted)", textDecoration: "underline" }}>
-          ← {category.icon} {category.label} 목록으로
-        </Link>
-      )}
+    <main className="container" style={{ paddingTop: "4px" }}>
+      <div className="detail-header">
+        <button className="detail-header-back" onClick={() => router.back()} aria-label="뒤로가기">
+          ‹
+        </button>
+        <p className="detail-header-title">모임 상세 화면</p>
+      </div>
 
-      <div className="card" style={{ marginTop: "12px" }}>
+      <div className="meetup-banner">
+        <div className="meetup-banner-icon">{category?.icon ?? "📍"}</div>
+      </div>
+
+      <div className="card" style={{ marginTop: "-32px", position: "relative", zIndex: 1 }}>
         <span
           className="tag"
           style={{
@@ -183,16 +189,23 @@ export default function MeetupDetailPage() {
           {!isOpen ? "취소된 매칭" : isPast ? "종료된 매칭" : isFull ? "모집 완료" : "모집 중"}
         </span>
         <h1 style={{ fontSize: "20px", fontWeight: 800, marginTop: "10px" }}>{meetup.title}</h1>
-        {meetup.description && (
-          <p style={{ color: "var(--text)", fontSize: "14px", marginTop: "8px", lineHeight: 1.6 }}>
-            {meetup.description}
-          </p>
-        )}
-        <p style={{ color: "var(--muted)", marginTop: "8px" }}>📍 {meetup.location_text}</p>
-        <p style={{ color: "var(--muted)", marginTop: "4px" }}>🕒 {formatDateTime(meetup.scheduled_at)}</p>
-        <p style={{ color: "var(--muted)", marginTop: "4px" }}>
-          👥 {participants.length}/{meetup.capacity}명
+
+        <p style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--muted)", marginTop: "10px" }}>
+          📅 {formatDateTime(meetup.scheduled_at)}
         </p>
+        <p style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--muted)", marginTop: "6px" }}>
+          📍 {meetup.location_text}
+        </p>
+        <p style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--muted)", marginTop: "6px" }}>
+          👥 <strong style={{ color: "var(--primary-dark)" }}>{participants.length}</strong>/{meetup.capacity}명 모집
+        </p>
+
+        {meetup.description && (
+          <div className="meetup-quote">
+            <span>🔊</span>
+            <span>&ldquo;{meetup.description}&rdquo;</span>
+          </div>
+        )}
 
         {host && hostTier && (
           <div
@@ -214,7 +227,7 @@ export default function MeetupDetailPage() {
         <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
           {!isHost && isOpen && !isPast && !isParticipant && (
             <button className="btn btn-primary" disabled={busy || isFull} onClick={handleJoin} style={{ flex: 1 }}>
-              {isFull ? "모집 완료" : "참가하기"}
+              {isFull ? "모집 완료" : "📷 깐부 하기 (참가 신청)"}
             </button>
           )}
           {!isHost && isParticipant && isOpen && !isPast && (
@@ -235,15 +248,20 @@ export default function MeetupDetailPage() {
               💥 깐부톡은 활동 종료 5시간 후 자동으로 폭파됐어요
             </p>
           ) : (
-            <Link href={`/meetup/${meetup.id}/chat`} className="btn btn-outline" style={{ width: "100%", marginTop: "10px" }}>
-              🤝 깐부톡 열기
-            </Link>
+            <>
+              <Link href={`/meetup/${meetup.id}/chat`} className="btn btn-outline" style={{ width: "100%", marginTop: "10px" }}>
+                🤝 깐부톡 열기
+              </Link>
+              <p style={{ fontSize: "12px", color: "var(--muted)", marginTop: "8px", textAlign: "center" }}>
+                ⏳ {formatCountdown(getChatDestroyAt(meetup.scheduled_at))} 후 자동폭파
+              </p>
+            </>
           )
         )}
       </div>
 
       <div className="card" style={{ marginTop: "16px" }}>
-        <p style={{ fontWeight: 800, marginBottom: "12px" }}>참가자 ({participants.length})</p>
+        <p style={{ fontWeight: 800, marginBottom: "12px" }}>참여 멤버 ({participants.length})</p>
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {participants.map((p) => {
             const tier = getMannerTier(p.score, p.meetupsJoined);

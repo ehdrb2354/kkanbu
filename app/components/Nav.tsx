@@ -17,7 +17,8 @@ export default function Nav() {
 
   if (pathname === "/login" || pathname === "/signup") return null;
 
-  const hasOwnHeader = pathname === "/" || pathname.startsWith("/profile");
+  const isMeetupDetail = /^\/meetup\/[^/]+$/.test(pathname) && pathname !== "/meetup/new";
+  const hasOwnHeader = pathname === "/" || pathname.startsWith("/profile") || isMeetupDetail;
 
   return (
     <>

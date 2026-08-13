@@ -812,6 +812,67 @@ button {
   font-weight: 700;
 }
 
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0 16px;
+}
+
+.detail-header-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(93, 64, 55, 0.15);
+  font-size: 20px;
+  color: var(--text);
+  border: none;
+  flex-shrink: 0;
+}
+
+.detail-header-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.meetup-banner {
+  height: 110px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meetup-banner-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  box-shadow: 0 6px 16px rgba(93, 64, 55, 0.3);
+}
+
+.meetup-quote {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: var(--primary-soft);
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
 .loading-screen {
   position: fixed;
   inset: 0;
