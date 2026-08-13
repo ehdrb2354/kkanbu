@@ -163,6 +163,7 @@ export default function MeetupDetailPage() {
   const isPast = new Date(meetup.scheduled_at).getTime() < Date.now();
   const isOpen = meetup.status === "open";
   const chatDestroyed = Date.now() >= getChatDestroyAt(meetup.scheduled_at);
+  const canRateMeetup = isPast && participants.length >= 3;
   const host = participants.find((p) => p.userId === meetup.host_id);
   const hostTier = host ? getMannerTier(host.score, host.meetupsJoined) : null;
 
@@ -266,6 +267,11 @@ export default function MeetupDetailPage() {
 
       <div className="card" style={{ marginTop: "16px" }}>
         <p style={{ fontWeight: 800, marginBottom: "12px" }}>참여 멤버 ({participants.length})</p>
+        {isPast && !canRateMeetup && (
+          <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "10px" }}>
+            매너 평가는 3명 이상 모인 모임에서만 할 수 있어요.
+          </p>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {participants.map((p) => {
             const tier = getMannerTier(p.score, p.meetupsJoined);
@@ -282,7 +288,7 @@ export default function MeetupDetailPage() {
                 </div>
                 {!isSelf && (
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    {isPast && isParticipant && (
+                    {canRateMeetup && isParticipant && (
                       alreadyRated ? (
                         <span style={{ fontSize: "12px", color: "var(--muted)" }}>평가완료</span>
                       ) : (

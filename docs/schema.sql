@@ -233,10 +233,22 @@ create policy "평가 내역은 로그인 유저 누구나 조회 가능"
   to authenticated
   using (true);
 
-create policy "본인 명의로만 평가 등록 가능"
+-- 본인 명의로만 평가 등록 가능 + 모임이 종료됐고 참여인원 3명 이상일 때만 평가 가능
+-- (프론트에서도 막지만, API를 직접 호출해도 못 뚫도록 DB 레벨에서 한 번 더 확인)
+create policy "본인 명의로만 평가 등록 가능 (3인 이상 종료된 모임만)"
   on public.manner_ratings for insert
   to authenticated
-  with check (auth.uid() = rater_id);
+  with check (
+    auth.uid() = rater_id
+    and exists (
+      select 1 from public.meetups m
+      where m.id = manner_ratings.meetup_id and m.scheduled_at < now()
+    )
+    and (
+      select count(*) from public.meetup_participants p
+      where p.meetup_id = manner_ratings.meetup_id
+    ) >= 3
+  );
 
 -- 평가가 등록되면 대상자의 manner_score/tier에 자동 반영 (0 미만으로는 안 내려감)
 create function public.apply_manner_rating()
@@ -411,3 +423,9 @@ alter publication supabase_realtime add table public.meetup_messages;
 -- ⚠️ 이제 실제 가입 유저/모임 데이터가 쌓여있을 수 있으니, 위 "전체 삭제 후 재실행"은 더 이상 권장하지 않아요.
 -- reports(신고) 기능만 새로 추가하는 경우라면, 위의 "reports" create table ~ "report_summary" 뷰
 -- 부분만 골라서 SQL Editor에 추가로 실행하면 기존 데이터에 영향 없이 반영돼요.
+--
+-- manner_ratings 평가 정책을 "3인 이상 + 종료된 모임만" 조건으로 이미 예전 버전으로 실행해뒀다면,
+-- 아래 두 줄만 추가로 실행해서 정책을 최신 버전으로 교체하세요 (데이터는 그대로 유지됩니다):
+--
+-- drop policy if exists "본인 명의로만 평가 등록 가능" on public.manner_ratings;
+-- (위의 "manner_ratings" 섹션에 있는 새 create policy "본인 명의로만 평가 등록 가능 (3인 이상 종료된 모임만)" 을 실행)

@@ -33,6 +33,7 @@ export default function ProfilePage() {
   const [meetupsJoined, setMeetupsJoined] = useState(0);
   const [buddiesMet, setBuddiesMet] = useState(0);
   const [badges, setBadges] = useState<EarnedBadge[]>([]);
+  const [positiveRatings, setPositiveRatings] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -76,8 +77,10 @@ export default function ProfilePage() {
 
     const { data: ratingRows } = await supabase
       .from("manner_ratings")
-      .select("tags")
+      .select("tags, delta")
       .eq("ratee_id", user.id);
+
+    setPositiveRatings((ratingRows ?? []).filter((r) => r.delta > 0).length);
 
     const freq: Record<string, number> = {};
     (ratingRows ?? []).forEach((r) => {
@@ -138,7 +141,7 @@ export default function ProfilePage() {
   const quests = [
     { label: "번개모임 3회 참여하기", progress: meetupsJoined, goal: 3 },
     { label: "새로운 깐부 2명 만나기", progress: buddiesMet, goal: 2 },
-    { label: "매너 점수 200점 달성하기", progress: score, goal: 200 },
+    { label: "다른 깐부에게 좋은 매너 평가 3회 받기", progress: positiveRatings, goal: 3 },
   ];
 
   return (
