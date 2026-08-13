@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "./lib/supabase/client";
@@ -28,6 +28,7 @@ export default function HomeMapPage() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const overlaysRef = useRef<any[]>([]);
+  const placesRef = useRef<any>(null);
 
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -38,6 +39,8 @@ export default function HomeMapPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [meetups, setMeetups] = useState<MeetupMarker[]>([]);
   const [activeMeetup, setActiveMeetup] = useState<MeetupMarker | null>(null);
 
@@ -108,6 +111,30 @@ export default function HomeMapPage() {
     );
   }
 
+  function handleSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query || !mapReady || !mapRef.current) return;
+
+    const kakao = window.kakao;
+    if (!placesRef.current) {
+      placesRef.current = new kakao.maps.services.Places();
+    }
+
+    setSearching(true);
+    setSearchError(null);
+    placesRef.current.keywordSearch(query, (results: any[], status: string) => {
+      setSearching(false);
+      if (status === kakao.maps.services.Status.OK && results.length > 0) {
+        const place = results[0];
+        mapRef.current.setCenter(new kakao.maps.LatLng(Number(place.y), Number(place.x)));
+        mapRef.current.setLevel(4);
+      } else {
+        setSearchError("검색 결과가 없어요.");
+      }
+    });
+  }
+
   const loadMeetups = useCallback(async () => {
     const supabase = createClient();
     let query = supabase
@@ -166,14 +193,6 @@ export default function HomeMapPage() {
     };
   }, [loadMeetups]);
 
-  const visibleMeetups = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return meetups;
-    return meetups.filter(
-      (m) => m.title.toLowerCase().includes(query) || m.location_text.toLowerCase().includes(query)
-    );
-  }, [meetups, searchQuery]);
-
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const kakao = window.kakao;
@@ -182,7 +201,7 @@ export default function HomeMapPage() {
     overlaysRef.current.forEach((o) => o.setMap(null));
     overlaysRef.current = [];
 
-    visibleMeetups.forEach((m) => {
+    meetups.forEach((m) => {
       const category = getCategory(m.category);
       const pin = document.createElement("div");
       pin.className = "kakao-marker-pin";
@@ -210,7 +229,7 @@ export default function HomeMapPage() {
       mineOverlay.setMap(map);
       overlaysRef.current.push(mineOverlay);
     }
-  }, [visibleMeetups, mapReady, myLocation]);
+  }, [meetups, mapReady, myLocation]);
 
   const selectedLabel = selectedCategory ? getCategory(selectedCategory)?.label ?? "전체" : "전체";
 
@@ -225,7 +244,7 @@ export default function HomeMapPage() {
       </div>
 
       <div className="map-search-wrap">
-        <div className="map-search-bar">
+        <form className="map-search-bar" onSubmit={handleSearchSubmit}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4.35-4.35" />
@@ -233,9 +252,12 @@ export default function HomeMapPage() {
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="동네 주변 장소를 검색해보세요"
+            placeholder="장소를 검색해보세요 (예: 해운대, 강남역)"
+            enterKeyHint="search"
           />
-        </div>
+          {searching && <span className="map-search-status">검색 중...</span>}
+        </form>
+        {searchError && <p className="map-search-error">{searchError}</p>}
       </div>
 
       {locationDenied && !mapError && (
