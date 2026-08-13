@@ -89,7 +89,7 @@ export default function ProfilePage() {
       });
     });
     const earned = MANNER_TAGS.filter((t) => t.positive && freq[t.key])
-      .map((t) => ({ key: t.key, label: t.label, icon: badgeIcon(t.key), count: freq[t.key] }))
+      .map((t) => ({ key: t.key, label: t.label, icon: t.icon, count: freq[t.key] }))
       .sort((a, b) => b.count - a.count);
     setBadges(earned);
 
@@ -307,17 +307,4 @@ export default function ProfilePage() {
       </Link>
     </main>
   );
-}
-
-function badgeIcon(tagKey: string): string {
-  switch (tagKey) {
-    case "punctual":
-      return "⏱️";
-    case "kind":
-      return "🏆";
-    case "fun":
-      return "💬";
-    default:
-      return "⭐";
-  }
 }

@@ -8,6 +8,7 @@ import { getCategory } from "../../lib/categories";
 import { getMannerTier } from "../../lib/mannerTier";
 import ParticipantAvatar from "../../components/ParticipantAvatar";
 import ReportButton from "../../components/ReportButton";
+import MannerRatingModal from "../../components/MannerRatingModal";
 import { getChatDestroyAt, formatCountdown } from "../../lib/chatLifecycle";
 
 type Participant = {
@@ -40,6 +41,7 @@ export default function MeetupDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ratingTarget, setRatingTarget] = useState<Participant | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -132,19 +134,6 @@ export default function MeetupDetailPage() {
     setBusy(true);
     const supabase = createClient();
     await supabase.from("meetups").update({ status: "closed" }).eq("id", params.id);
-    setBusy(false);
-    load();
-  }
-
-  async function handleRate(rateeId: string, delta: number) {
-    if (!userId) return;
-    setBusy(true);
-    setError(null);
-    const supabase = createClient();
-    const { error: rateError } = await supabase
-      .from("manner_ratings")
-      .insert({ meetup_id: params.id, rater_id: userId, ratee_id: rateeId, delta });
-    if (rateError) setError("이미 평가했어요.");
     setBusy(false);
     load();
   }
@@ -292,24 +281,13 @@ export default function MeetupDetailPage() {
                       alreadyRated ? (
                         <span style={{ fontSize: "12px", color: "var(--muted)" }}>평가완료</span>
                       ) : (
-                        <div style={{ display: "flex", gap: "6px" }}>
-                          <button
-                            className="btn btn-safe"
-                            style={{ padding: "6px 10px", fontSize: "12px" }}
-                            disabled={busy}
-                            onClick={() => handleRate(p.userId, 10)}
-                          >
-                            👍
-                          </button>
-                          <button
-                            className="btn btn-danger"
-                            style={{ padding: "6px 10px", fontSize: "12px" }}
-                            disabled={busy}
-                            onClick={() => handleRate(p.userId, -15)}
-                          >
-                            👎
-                          </button>
-                        </div>
+                        <button
+                          className="btn btn-primary"
+                          style={{ padding: "6px 12px", fontSize: "12px" }}
+                          onClick={() => setRatingTarget(p)}
+                        >
+                          평가하기
+                        </button>
                       )
                     )}
                     <ReportButton targetType="user" targetId={p.userId} targetLabel={p.nickname} compact />
@@ -320,6 +298,18 @@ export default function MeetupDetailPage() {
           })}
         </div>
       </div>
+
+      {ratingTarget && (
+        <MannerRatingModal
+          meetupId={meetup.id}
+          ratee={ratingTarget}
+          onClose={() => setRatingTarget(null)}
+          onSubmitted={() => {
+            setRatingTarget(null);
+            load();
+          }}
+        />
+      )}
     </main>
   );
 }

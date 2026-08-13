@@ -601,6 +601,31 @@ button {
   color: var(--danger);
 }
 
+.rating-slider {
+  flex: 1;
+  accent-color: var(--primary-dark);
+  height: 6px;
+}
+
+.rating-tag-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.rating-tag-item input {
+  accent-color: var(--primary-dark);
+  width: 16px;
+  height: 16px;
+}
+
 .report-trigger {
   background: none;
   border: none;

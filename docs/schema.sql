@@ -219,8 +219,9 @@ create table public.manner_ratings (
   meetup_id uuid not null references public.meetups (id) on delete cascade,
   rater_id uuid not null references public.profiles (id),
   ratee_id uuid not null references public.profiles (id),
-  delta int not null, -- +10 굿매너 / -15 비매너
+  delta int not null, -- 평가 슬라이더 0~100점을 scoreToDelta()로 환산한 값 (+10 ~ -15)
   tags text[] not null default '{}', -- 예: punctual, kind, fun / noshow, rude (app/lib/mannerTags.ts 참고)
+  comment text not null default '', -- 한줄 후기 (선택 입력)
   created_at timestamptz not null default now(),
   unique (meetup_id, rater_id, ratee_id),
   check (rater_id <> ratee_id)
@@ -429,3 +430,7 @@ alter publication supabase_realtime add table public.meetup_messages;
 --
 -- drop policy if exists "본인 명의로만 평가 등록 가능" on public.manner_ratings;
 -- (위의 "manner_ratings" 섹션에 있는 새 create policy "본인 명의로만 평가 등록 가능 (3인 이상 종료된 모임만)" 을 실행)
+--
+-- manner_ratings에 한줄 후기(comment) 컬럼이 없다면 아래 한 줄만 추가로 실행하세요:
+--
+-- alter table public.manner_ratings add column if not exists comment text not null default '';
