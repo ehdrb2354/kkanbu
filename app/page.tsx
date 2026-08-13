@@ -33,6 +33,8 @@ export default function HomeMapPage() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryFailed, setRetryFailed] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,16 +87,23 @@ export default function HomeMapPage() {
 
   function retryLocation() {
     if (!navigator.geolocation) return;
+    setRetrying(true);
+    setRetryFailed(false);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const center = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setMyLocation(center);
         setLocationDenied(false);
+        setRetrying(false);
         if (mapRef.current) {
           mapRef.current.setCenter(new window.kakao.maps.LatLng(center.lat, center.lng));
         }
       },
-      () => setLocationDenied(true),
+      () => {
+        setLocationDenied(true);
+        setRetrying(false);
+        setRetryFailed(true);
+      },
       { timeout: 5000 }
     );
   }
@@ -234,10 +243,14 @@ export default function HomeMapPage() {
           <div>
             <p>📍 위치 권한이 꺼져 있어서 기본 위치로 보여주고 있어요.</p>
             <p className="location-denied-hint">
-              계속 안 되면 주소창의 자물쇠 아이콘 → 위치 권한을 허용으로 바꾼 뒤 새로고침 해주세요.
+              {retryFailed
+                ? "여전히 차단돼 있어요. 브라우저 주소창의 자물쇠(또는 ⓘ) 아이콘 → 위치 권한을 허용으로 바꾼 뒤 새로고침 해주세요."
+                : "권한을 허용으로 바꿨다면 다시 시도를 눌러보세요."}
             </p>
           </div>
-          <button onClick={retryLocation}>다시 시도</button>
+          <button onClick={retryLocation} disabled={retrying}>
+            {retrying ? "확인 중..." : "다시 시도"}
+          </button>
         </div>
       )}
 
