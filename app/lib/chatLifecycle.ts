@@ -19,3 +19,14 @@ export function formatCountdown(destroyAt: number): string {
   if (hours <= 0) return `${minutes}분 후 폭파`;
   return `${hours}시간 ${minutes}분 후 폭파`;
 }
+
+// "다이너마이트 타이머" 같은 큰 시계형 표시용 (HH:MM:SS)
+export function formatHMS(destroyAt: number): string {
+  const remainingMs = Math.max(0, destroyAt - Date.now());
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}

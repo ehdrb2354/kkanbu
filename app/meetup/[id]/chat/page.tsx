@@ -5,13 +5,22 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { getCategory } from "../../../lib/categories";
-import { getChatDestroyAt, formatCountdown } from "../../../lib/chatLifecycle";
+import { getMannerTier } from "../../../lib/mannerTier";
+import ParticipantAvatar from "../../../components/ParticipantAvatar";
+import { getChatDestroyAt, formatHMS } from "../../../lib/chatLifecycle";
 
 type Message = {
   id: string;
   senderId: string;
   content: string;
   createdAt: string;
+};
+
+type ParticipantInfo = {
+  nickname: string;
+  avatarUrl: string | null;
+  score: number;
+  meetupsJoined: number;
 };
 
 type MeetupInfo = {
@@ -26,15 +35,18 @@ export default function MeetupChatPage() {
   const params = useParams<{ id: string }>();
   const [userId, setUserId] = useState<string | null>(null);
   const [meetup, setMeetup] = useState<MeetupInfo | null>(null);
-  const [nicknames, setNicknames] = useState<Record<string, string>>({});
+  const [participants, setParticipants] = useState<Record<string, ParticipantInfo>>({});
   const [isParticipant, setIsParticipant] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [destroyed, setDestroyed] = useState(false);
-  const [countdown, setCountdown] = useState("");
+  const [hms, setHms] = useState("00:00:00");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"chat" | "members">("chat");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [comingSoon, setComingSoon] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const destroyAtRef = useRef<number | null>(null);
@@ -71,19 +83,27 @@ export default function MeetupChatPage() {
 
     const { data: participantRows } = await supabase
       .from("meetup_participants")
-      .select("user_id, profiles(nickname)")
+      .select("user_id, profiles(nickname, avatar, manner_score, meetups_joined_count)")
       .eq("meetup_id", params.id);
 
-    const map: Record<string, string> = {};
+    const map: Record<string, ParticipantInfo> = {};
     (participantRows ?? []).forEach((row) => {
       const r = row as unknown as {
         user_id: string;
-        profiles: { nickname: string } | { nickname: string }[] | null;
+        profiles:
+          | { nickname: string; avatar: string | null; manner_score: number; meetups_joined_count: number }
+          | { nickname: string; avatar: string | null; manner_score: number; meetups_joined_count: number }[]
+          | null;
       };
       const profile = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
-      map[r.user_id] = profile?.nickname ?? "알 수 없음";
+      map[r.user_id] = {
+        nickname: profile?.nickname ?? "알 수 없음",
+        avatarUrl: profile?.avatar ?? null,
+        score: profile?.manner_score ?? 0,
+        meetupsJoined: profile?.meetups_joined_count ?? 0,
+      };
     });
-    setNicknames(map);
+    setParticipants(map);
 
     const participant = currentUserId ? Object.prototype.hasOwnProperty.call(map, currentUserId) : false;
     setIsParticipant(participant);
@@ -149,11 +169,11 @@ export default function MeetupChatPage() {
       if (Date.now() >= destroyAtRef.current) {
         purgeIfExpired();
       } else {
-        setCountdown(formatCountdown(destroyAtRef.current));
+        setHms(formatHMS(destroyAtRef.current));
       }
     };
     tick();
-    const interval = setInterval(tick, 30000);
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [purgeIfExpired, meetup]);
 
@@ -173,6 +193,11 @@ export default function MeetupChatPage() {
     if (sendError) setError("전송에 실패했어요.");
     else setInput("");
     setSending(false);
+  }
+
+  function handleComingSoon() {
+    setComingSoon(true);
+    setTimeout(() => setComingSoon(false), 1800);
   }
 
   if (loading) {
@@ -216,6 +241,8 @@ export default function MeetupChatPage() {
     );
   }
 
+  const memberList = Object.entries(participants);
+
   return (
     <main className="chat-page">
       <div className="chat-pinned-card">
@@ -230,38 +257,114 @@ export default function MeetupChatPage() {
         </p>
       </div>
 
-      <div className="chat-banner">⏳ {countdown || "폭파 시간 계산 중"} — 대화 내용은 자동으로 사라져요</div>
-
-      <div className="chat-messages">
-        {messages.length === 0 && (
-          <p style={{ textAlign: "center", color: "var(--muted)", fontSize: "13px", marginTop: "24px" }}>
-            아직 대화가 없어요. 첫 메시지를 보내보세요!
-          </p>
-        )}
-        {messages.map((m) => {
-          const mine = m.senderId === userId;
-          return (
-            <div key={m.id} className={`chat-row ${mine ? "chat-row-mine" : ""}`}>
-              {!mine && <span className="chat-sender">{nicknames[m.senderId] ?? "알 수 없음"}</span>}
-              <div className={`chat-bubble ${mine ? "chat-bubble-mine" : ""}`}>{m.content}</div>
+      <div className="chat-header-icons">
+        <button
+          className={`chat-header-icon-btn ${view === "members" ? "active" : ""}`}
+          onClick={() => setView("members")}
+          aria-label="구성원 보기"
+        >
+          👥
+        </button>
+        <button
+          className={`chat-header-icon-btn ${view === "chat" ? "active" : ""}`}
+          onClick={() => setView("chat")}
+          aria-label="다이너마이트 타이머"
+        >
+          🧨
+        </button>
+        <button className="chat-header-icon-btn" style={{ opacity: 0.4 }} onClick={handleComingSoon} aria-label="N빵 정산 (준비중)">
+          🪙
+        </button>
+        <div style={{ position: "relative" }}>
+          <button className="chat-header-icon-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="메뉴">
+            ☰
+          </button>
+          {menuOpen && (
+            <div className="chat-menu-popover">
+              <Link href={`/meetup/${params.id}`} onClick={() => setMenuOpen(false)}>
+                📋 매칭 상세보기
+              </Link>
             </div>
-          );
-        })}
-        <div ref={bottomRef} />
+          )}
+        </div>
       </div>
 
-      <form onSubmit={handleSend} className="chat-composer">
-        <input
-          className="field-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="메시지를 입력하세요"
-          maxLength={500}
-        />
-        <button type="submit" className="btn btn-primary" disabled={sending || !input.trim()}>
-          전송
-        </button>
-      </form>
+      {comingSoon && <div className="chat-toast">🪙 N빵 정산은 준비 중이에요!</div>}
+
+      {view === "members" ? (
+        <div className="chat-messages">
+          {memberList.map(([uid, p]) => {
+            const tier = getMannerTier(p.score, p.meetupsJoined);
+            return (
+              <div key={uid} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 0" }}>
+                <ParticipantAvatar avatarUrl={p.avatarUrl} tier={tier} size={40} />
+                <div>
+                  <p style={{ fontWeight: 700 }}>
+                    {p.nickname}
+                    {uid === userId ? " (나)" : ""}
+                  </p>
+                  <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="chat-messages">
+          <div className="chat-dynamite">
+            <span style={{ fontSize: "36px" }}>🧨</span>
+            <p className="chat-dynamite-clock">{hms}</p>
+            <p style={{ fontSize: "11px", color: "var(--muted)" }}>뒤에 대화가 자동으로 사라져요</p>
+          </div>
+
+          {messages.length === 0 && (
+            <p style={{ textAlign: "center", color: "var(--muted)", fontSize: "13px", marginTop: "12px" }}>
+              아직 대화가 없어요. 첫 메시지를 보내보세요!
+            </p>
+          )}
+          {messages.map((m) => {
+            const mine = m.senderId === userId;
+            const sender = participants[m.senderId];
+            return (
+              <div key={m.id} className={`chat-row ${mine ? "chat-row-mine" : ""}`}>
+                {!mine && (
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: "6px" }}>
+                    <div className="chat-avatar-small">
+                      {sender?.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={sender.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <span>📍</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="chat-sender">{sender?.nickname ?? "알 수 없음"}</span>
+                      <div className="chat-bubble">{m.content}</div>
+                    </div>
+                  </div>
+                )}
+                {mine && <div className="chat-bubble chat-bubble-mine">{m.content}</div>}
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+      )}
+
+      {view === "chat" && (
+        <form onSubmit={handleSend} className="chat-composer">
+          <input
+            className="field-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="메시지를 입력하세요"
+            maxLength={500}
+          />
+          <button type="submit" className="btn btn-primary" disabled={sending || !input.trim()}>
+            전송
+          </button>
+        </form>
+      )}
       {error && <p style={{ color: "var(--danger)", fontSize: "12px", padding: "0 20px" }}>{error}</p>}
     </main>
   );

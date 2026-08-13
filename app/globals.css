@@ -546,6 +546,96 @@ button {
   flex: 1;
 }
 
+.chat-header-icons {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 10px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.chat-header-icon-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  color: var(--muted);
+}
+
+.chat-header-icon-btn.active {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.chat-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(93, 64, 55, 0.25);
+  padding: 8px;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.chat-menu-popover a {
+  display: block;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--text);
+  border-radius: 8px;
+}
+
+.chat-toast {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 999px;
+  z-index: 20;
+  white-space: nowrap;
+}
+
+.chat-dynamite {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px 0 16px;
+}
+
+.chat-dynamite-clock {
+  font-size: 28px;
+  font-weight: 800;
+  font-family: "Courier New", monospace;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.chat-avatar-small {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .map-picker-hint {
   position: absolute;
   top: 8px;
