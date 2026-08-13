@@ -24,6 +24,9 @@ export default function AdminAnalyticsPage() {
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<CategoryCount[]>([]);
   const [etcMeetups, setEtcMeetups] = useState<EtcMeetup[]>([]);
+  const [userTotal, setUserTotal] = useState(0);
+  const [userToday, setUserToday] = useState(0);
+  const [userThisWeek, setUserThisWeek] = useState(0);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -41,6 +44,15 @@ export default function AdminAnalyticsPage() {
       return;
     }
     setIsAdmin(true);
+
+    const { data: profileRows } = await supabase.from("profiles").select("id, created_at");
+    const users = profileRows ?? [];
+    setUserTotal(users.length);
+
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    setUserToday(users.filter((u) => now - new Date(u.created_at).getTime() < dayMs).length);
+    setUserThisWeek(users.filter((u) => now - new Date(u.created_at).getTime() < 7 * dayMs).length);
 
     const { data: meetupRows } = await supabase.from("meetups").select("id, category, title, description, created_at");
     const rows = meetupRows ?? [];
@@ -96,6 +108,24 @@ export default function AdminAnalyticsPage() {
       <p style={{ color: "var(--muted)", fontSize: "13px", marginBottom: "16px" }}>
         지금까지 생성된 모임 총 {total}개 기준 (취소/종료 포함 전체)
       </p>
+
+      <div className="card" style={{ marginBottom: "16px" }}>
+        <p style={{ fontWeight: 800, marginBottom: "12px" }}>👥 가입자 현황</p>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <p style={{ fontSize: "22px", fontWeight: 800, color: "var(--primary-dark)" }}>{userTotal}</p>
+            <p style={{ fontSize: "12px", color: "var(--muted)" }}>총 가입자</p>
+          </div>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <p style={{ fontSize: "22px", fontWeight: 800, color: "var(--primary-dark)" }}>{userToday}</p>
+            <p style={{ fontSize: "12px", color: "var(--muted)" }}>오늘 가입</p>
+          </div>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <p style={{ fontSize: "22px", fontWeight: 800, color: "var(--primary-dark)" }}>{userThisWeek}</p>
+            <p style={{ fontSize: "12px", color: "var(--muted)" }}>최근 7일</p>
+          </div>
+        </div>
+      </div>
 
       <div className="card">
         <p style={{ fontWeight: 800, marginBottom: "12px" }}>인기 카테고리 순위</p>
