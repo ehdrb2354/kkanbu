@@ -3,13 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HomeIcon, NearbyIcon, ChatIcon, ProfileIcon } from "./TabIcons";
+import { HomeIcon, NearbyIcon, ChatIcon, MeetupsIcon, ProfileIcon } from "./TabIcons";
 import { useUnreadChats } from "../lib/notifications";
 
 const TABS = [
   { href: "/", label: "홈", Icon: HomeIcon },
   { href: "/nearby", label: "주변", Icon: NearbyIcon },
   { href: "/chats", label: "채팅", Icon: ChatIcon },
+  { href: "/kkanbu", label: "깐부", Icon: MeetupsIcon },
   { href: "/profile", label: "프로필", Icon: ProfileIcon },
 ];
 

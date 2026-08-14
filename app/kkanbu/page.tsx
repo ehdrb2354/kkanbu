@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { createClient } from "../lib/supabase/client";
 import { getMannerTier } from "../lib/mannerTier";
 import ParticipantAvatar from "../components/ParticipantAvatar";
@@ -208,10 +207,6 @@ export default function KkanbuPage() {
           </div>
         )}
       </div>
-
-      <Link href="/profile" className="btn btn-outline" style={{ width: "100%", marginTop: "16px" }}>
-        ← 마이페이지로 돌아가기
-      </Link>
 
       {addOpen && <AddFriendModal onClose={() => setAddOpen(false)} onDone={load} />}
     </main>

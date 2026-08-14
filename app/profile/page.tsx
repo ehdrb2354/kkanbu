@@ -304,11 +304,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <Link href="/kkanbu" className="btn btn-outline" style={{ width: "100%", marginTop: "16px" }}>
-        🤝 나의 깐부
-      </Link>
-
-      <Link href="/my-meetups" className="btn btn-outline" style={{ width: "100%", marginTop: "10px" }}>
+      <Link href="/my-meetups" className="btn btn-outline" style={{ width: "100%", marginTop: "16px" }}>
         🙋 내가 만든/참여한 모임 이력
       </Link>
 
