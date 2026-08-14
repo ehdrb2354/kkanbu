@@ -533,10 +533,108 @@ create trigger on_meetup_message_push
   after insert on public.meetup_messages
   for each row execute function public.notify_new_chat_message();
 
+-- ── 깐부(친구) 코드 & 친구 관계 ───────────────────────────
+-- 프로필마다 고유한 "깐부 코드"를 부여해서, 그 코드를 아는 사람끼리만 친구 요청을 보낼 수 있게 합니다.
+alter table public.profiles add column if not exists friend_code text unique;
+
+update public.profiles
+set friend_code = upper(substr(md5(random()::text || id::text || clock_timestamp()::text), 1, 8))
+where friend_code is null;
+
+alter table public.profiles alter column friend_code set not null;
+alter table public.profiles alter column friend_code
+  set default upper(substr(md5(random()::text || clock_timestamp()::text), 1, 8));
+
+-- pair_key로 (A,B)/(B,A) 같은 반대 방향 중복 요청을 막습니다.
+create table public.friendships (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references public.profiles (id) on delete cascade,
+  addressee_id uuid not null references public.profiles (id) on delete cascade,
+  status text not null default 'pending', -- 'pending' | 'accepted'
+  created_at timestamptz not null default now(),
+  responded_at timestamptz,
+  pair_key text generated always as (
+    least(requester_id::text, addressee_id::text) || '_' || greatest(requester_id::text, addressee_id::text)
+  ) stored,
+  constraint friendships_no_self check (requester_id <> addressee_id)
+);
+
+create unique index friendships_pair_unique on public.friendships (pair_key);
+
+alter table public.friendships enable row level security;
+
+create policy "내가 관련된 친구 관계만 조회 가능"
+  on public.friendships for select
+  to authenticated
+  using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+-- 쓰기는 클라이언트가 테이블에 직접 하지 않고 아래 두 함수를 통해서만 합니다 (RLS insert/update 정책 없음).
+
+-- 상대가 이미 나에게 요청을 보내둔 상태였다면 새로 만들지 않고 바로 수락 처리합니다.
+create function public.send_friend_request(target_code text)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target_id uuid;
+  existing record;
+begin
+  select id into target_id from public.profiles where friend_code = upper(target_code);
+  if target_id is null then
+    raise exception '해당 코드의 깐부를 찾을 수 없어요';
+  end if;
+  if target_id = auth.uid() then
+    raise exception '자기 자신은 추가할 수 없어요';
+  end if;
+
+  select * into existing from public.friendships
+  where pair_key = least(auth.uid()::text, target_id::text) || '_' || greatest(auth.uid()::text, target_id::text);
+
+  if existing.id is null then
+    insert into public.friendships (requester_id, addressee_id, status)
+    values (auth.uid(), target_id, 'pending');
+    return 'requested';
+  elsif existing.status = 'accepted' then
+    return 'already_friends';
+  elsif existing.requester_id = auth.uid() then
+    return 'already_requested';
+  else
+    update public.friendships set status = 'accepted', responded_at = now() where id = existing.id;
+    return 'accepted';
+  end if;
+end;
+$$;
+
+grant execute on function public.send_friend_request(text) to authenticated;
+
+-- 거절은 상태를 남기지 않고 그냥 지웁니다 (나중에 다시 요청 가능).
+create function public.respond_friend_request(request_id uuid, accept boolean)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if accept then
+    update public.friendships
+    set status = 'accepted', responded_at = now()
+    where id = request_id and addressee_id = auth.uid() and status = 'pending';
+  else
+    delete from public.friendships
+    where id = request_id and addressee_id = auth.uid() and status = 'pending';
+  end if;
+end;
+$$;
+
+grant execute on function public.respond_friend_request(uuid, boolean) to authenticated;
+
 -- ── Realtime: 참가자 수 / 채팅 실시간 반영 ─────────────────
 alter publication supabase_realtime add table public.meetups;
 alter publication supabase_realtime add table public.meetup_participants;
 alter publication supabase_realtime add table public.meetup_messages;
+alter publication supabase_realtime add table public.friendships;
 
 -- ── (선택) 깐부톡 서버단 자동 폭파 — pg_cron ───────────────
 -- 앱이 채팅을 열 때마다 "활동 시작 + 5시간이 지난 채팅"을 클라이언트에서도 삭제하지만,
@@ -667,3 +765,8 @@ alter publication supabase_realtime add table public.meetup_messages;
 -- 위의 "push_subscriptions" 섹션(create table ~ 정책 4개)만 골라서 SQL Editor에 추가로 실행하세요.
 -- 그 다음 Supabase 대시보드 → Database → Webhooks 에서 meetup_messages insert 웹훅을
 -- /api/push/send 로 설정해야 실제로 발송됩니다.
+--
+-- "나의 깐부"(친구) 기능을 새로 추가하는 경우, 위의 "깐부(친구) 코드 & 친구 관계" 섹션
+-- (profiles.friend_code 컬럼 추가 ~ friendships 테이블 ~ 함수 2개 ~ grant execute 2줄과,
+--  Realtime 섹션의 "alter publication supabase_realtime add table public.friendships;" 한 줄)만
+-- 골라서 SQL Editor에 추가로 실행하세요.
