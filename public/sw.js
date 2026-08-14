@@ -21,6 +21,45 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    return;
+  }
+
+  const url = `/meetup/${payload.meetupId}/chat`;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((allClients) => {
+      const alreadyViewing = allClients.some((client) => client.focused && client.url.includes(url));
+      if (alreadyViewing) return;
+
+      return self.registration.showNotification(payload.title || "🤝 깐부톡", {
+        body: payload.body || "",
+        icon: "/icon-192.png",
+        tag: `chat-${payload.meetupId}`,
+        data: { url },
+      });
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/chats";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((allClients) => {
+      const existing = allClients.find((client) => client.url.includes(url));
+      if (existing) return existing.focus();
+      return self.clients.openWindow(url);
+    })
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);

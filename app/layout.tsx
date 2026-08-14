@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Nav from "./components/Nav";
 import RegisterServiceWorker from "./register-sw";
+import { NotificationProvider } from "./lib/notifications";
 
 export const metadata: Metadata = {
   title: "깐부 — 너 내 깐부 해라!",
@@ -39,8 +40,10 @@ export default function RootLayout({
       </head>
       <body>
         <RegisterServiceWorker />
-        <Nav />
-        {children}
+        <NotificationProvider>
+          <Nav />
+          {children}
+        </NotificationProvider>
       </body>
     </html>
   );

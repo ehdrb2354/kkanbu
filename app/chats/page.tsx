@@ -5,6 +5,8 @@ import Link from "next/link";
 import { createClient } from "../lib/supabase/client";
 import { getCategory } from "../lib/categories";
 import { getChatDestroyAt, formatCountdown, isChatDestroyed } from "../lib/chatLifecycle";
+import { useUnreadChats } from "../lib/notifications";
+import NotificationPermissionBanner from "../components/NotificationPermissionBanner";
 
 type ChatRoom = {
   id: string;
@@ -27,6 +29,7 @@ export default function ChatsPage() {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
+  const { unreadMeetupIds } = useUnreadChats();
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -78,6 +81,8 @@ export default function ChatsPage() {
     <main className="container" style={{ paddingTop: "24px" }}>
       <h1 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "16px" }}>🤝 내 깐부톡</h1>
 
+      <NotificationPermissionBanner />
+
       {rooms.length === 0 && (
         <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>
           <p>아직 열려있는 깐부톡이 없어요.</p>
@@ -98,6 +103,7 @@ export default function ChatsPage() {
             >
               <div>
                 <p style={{ fontWeight: 800, fontSize: "15px" }}>
+                  {unreadMeetupIds.has(r.id) && <span className="chat-room-dot" />}
                   {category?.icon} {r.title}
                 </p>
                 <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "4px" }}>📍 {r.location_text}</p>

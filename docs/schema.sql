@@ -457,6 +457,82 @@ $$;
 
 grant execute on function public.apply_report_sanction(uuid) to authenticated;
 
+-- ── push_subscriptions (앱이 꺼져있어도 오는 푸시 알림용 구독 정보) ──
+create table public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.push_subscriptions enable row level security;
+
+create policy "본인 구독 정보만 조회 가능"
+  on public.push_subscriptions for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy "본인 명의로만 구독 등록 가능"
+  on public.push_subscriptions for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "본인 구독 정보만 수정 가능"
+  on public.push_subscriptions for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "본인 구독 정보만 삭제 가능"
+  on public.push_subscriptions for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
+-- 실제 발송은 서버(Next.js /api/push/send)가 service_role 키로 이 테이블을 읽어서 처리합니다.
+-- (RLS는 우회, 클라이언트는 자기 구독 정보만 CRUD 가능)
+
+-- ── meetup_messages insert마다 푸시 발송 API를 호출하는 트리거 ─────
+-- 대시보드에 Database → Webhooks 메뉴가 없는 프로젝트라면, pg_net으로 직접 호출하는
+-- 이 트리거가 Webhooks UI와 동일한 역할을 합니다.
+-- <YOUR_DEPLOY_URL>과 <YOUR_PUSH_WEBHOOK_SECRET>을 실제 값으로 바꿔서 SQL Editor에서 실행하세요.
+-- (실제 값이 들어간 완성본은 커밋하지 말고 그때그때 채워서 SQL Editor에만 붙여넣으세요.)
+
+create extension if not exists pg_net;
+
+create or replace function public.notify_new_chat_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform net.http_post(
+    url := '<YOUR_DEPLOY_URL>/api/push/send',
+    body := jsonb_build_object(
+      'type', 'INSERT',
+      'table', 'meetup_messages',
+      'record', jsonb_build_object(
+        'id', new.id,
+        'meetup_id', new.meetup_id,
+        'sender_id', new.sender_id,
+        'content', new.content
+      )
+    ),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer <YOUR_PUSH_WEBHOOK_SECRET>'
+    )
+  );
+  return new;
+end;
+$$;
+
+create trigger on_meetup_message_push
+  after insert on public.meetup_messages
+  for each row execute function public.notify_new_chat_message();
+
 -- ── Realtime: 참가자 수 / 채팅 실시간 반영 ─────────────────
 alter publication supabase_realtime add table public.meetups;
 alter publication supabase_realtime add table public.meetup_participants;
@@ -586,3 +662,8 @@ alter publication supabase_realtime add table public.meetup_messages;
 --
 -- update public.profiles
 -- set tier = public.compute_tier(manner_score, meetups_joined_count);
+--
+-- 앱이 꺼져있어도(백그라운드/종료 상태) 채팅 알림이 오는 푸시 알림 기능을 새로 추가하는 경우,
+-- 위의 "push_subscriptions" 섹션(create table ~ 정책 4개)만 골라서 SQL Editor에 추가로 실행하세요.
+-- 그 다음 Supabase 대시보드 → Database → Webhooks 에서 meetup_messages insert 웹훅을
+-- /api/push/send 로 설정해야 실제로 발송됩니다.

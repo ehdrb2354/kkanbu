@@ -98,6 +98,26 @@ button {
   color: var(--primary-dark);
 }
 
+.bottom-nav-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger, #e5484d);
+  border: 1px solid #fff;
+}
+
+.chat-room-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger, #e5484d);
+  margin-right: 6px;
+}
+
 .card {
   background: var(--card);
   border: 1px solid rgba(0, 0, 0, 0.04);

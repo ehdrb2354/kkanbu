@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HomeIcon, NearbyIcon, ChatIcon, ProfileIcon } from "./TabIcons";
+import { useUnreadChats } from "../lib/notifications";
 
 const TABS = [
   { href: "/", label: "홈", Icon: HomeIcon },
@@ -14,6 +15,7 @@ const TABS = [
 
 export default function Nav() {
   const pathname = usePathname();
+  const { unreadMeetupIds } = useUnreadChats();
 
   if (pathname === "/login" || pathname === "/signup") return null;
 
@@ -38,7 +40,10 @@ export default function Nav() {
             href={tab.href}
             className={`bottom-nav-link ${pathname === tab.href ? "active" : ""}`}
           >
-            <tab.Icon size={22} />
+            <span style={{ position: "relative" }}>
+              <tab.Icon size={22} />
+              {tab.href === "/chats" && unreadMeetupIds.size > 0 && <span className="bottom-nav-dot" />}
+            </span>
             <span>{tab.label}</span>
           </Link>
         ))}
