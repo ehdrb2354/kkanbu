@@ -28,8 +28,9 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup";
   const isAuthCallback = request.nextUrl.pathname.startsWith("/auth/callback");
   const isPublicAsset = request.nextUrl.pathname.startsWith("/_next");
+  const isPushWebhook = request.nextUrl.pathname.startsWith("/api/push");
 
-  if (!user && !isAuthPage && !isAuthCallback && !isPublicAsset) {
+  if (!user && !isAuthPage && !isAuthCallback && !isPublicAsset && !isPushWebhook) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
