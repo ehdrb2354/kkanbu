@@ -8,6 +8,7 @@ import { getCategory } from "../../lib/categories";
 import { getMannerTier } from "../../lib/mannerTier";
 import ParticipantAvatar from "../../components/ParticipantAvatar";
 import ReportButton from "../../components/ReportButton";
+import AddFriendButton from "../../components/AddFriendButton";
 import MannerRatingModal from "../../components/MannerRatingModal";
 import { getChatDestroyAt, formatCountdown } from "../../lib/chatLifecycle";
 import { isSuspended, formatSuspensionRemaining } from "../../lib/suspension";
@@ -313,6 +314,7 @@ export default function MeetupDetailPage() {
                         </button>
                       )
                     )}
+                    <AddFriendButton targetId={p.userId} />
                     <ReportButton targetType="user" targetId={p.userId} targetLabel={p.nickname} compact />
                   </div>
                 )}

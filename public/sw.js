@@ -30,17 +30,18 @@ self.addEventListener("push", (event) => {
     return;
   }
 
-  const url = `/meetup/${payload.meetupId}/chat`;
+  const isDm = Boolean(payload.senderId);
+  const url = isDm ? `/dm/${payload.senderId}` : `/meetup/${payload.meetupId}/chat`;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((allClients) => {
       const alreadyViewing = allClients.some((client) => client.focused && client.url.includes(url));
       if (alreadyViewing) return;
 
-      return self.registration.showNotification(payload.title || "🤝 깐부톡", {
+      return self.registration.showNotification(payload.title || (isDm ? "💬 깐부" : "🤝 깐부톡"), {
         body: payload.body || "",
         icon: "/icon-192.png",
-        tag: `chat-${payload.meetupId}`,
+        tag: isDm ? `dm-${payload.senderId}` : `chat-${payload.meetupId}`,
         data: { url },
       });
     })

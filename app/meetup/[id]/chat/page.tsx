@@ -8,6 +8,7 @@ import { getCategory } from "../../../lib/categories";
 import { getMannerTier } from "../../../lib/mannerTier";
 import ParticipantAvatar from "../../../components/ParticipantAvatar";
 import ReportButton from "../../../components/ReportButton";
+import AddFriendButton from "../../../components/AddFriendButton";
 import { getChatDestroyAt, formatHMS } from "../../../lib/chatLifecycle";
 
 type Message = {
@@ -308,17 +309,32 @@ export default function MeetupChatPage() {
                 key={uid}
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "8px 0" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <ParticipantAvatar avatarUrl={p.avatarUrl} tier={tier} size={40} />
-                  <div>
-                    <p style={{ fontWeight: 700 }}>
-                      {p.nickname}
-                      {uid === userId ? " (나)" : ""}
-                    </p>
-                    <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
+                {uid === userId ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <ParticipantAvatar avatarUrl={p.avatarUrl} tier={tier} size={40} />
+                    <div>
+                      <p style={{ fontWeight: 700 }}>{p.nickname} (나)</p>
+                      <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
+                    </div>
                   </div>
-                </div>
-                {uid !== userId && <ReportButton targetType="user" targetId={uid} targetLabel={p.nickname} compact />}
+                ) : (
+                  <Link
+                    href={`/profile/${uid}`}
+                    style={{ display: "flex", alignItems: "center", gap: "10px", color: "inherit", textDecoration: "none" }}
+                  >
+                    <ParticipantAvatar avatarUrl={p.avatarUrl} tier={tier} size={40} />
+                    <div>
+                      <p style={{ fontWeight: 700 }}>{p.nickname}</p>
+                      <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
+                    </div>
+                  </Link>
+                )}
+                {uid !== userId && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <AddFriendButton targetId={uid} />
+                    <ReportButton targetType="user" targetId={uid} targetLabel={p.nickname} compact />
+                  </div>
+                )}
               </div>
             );
           })}

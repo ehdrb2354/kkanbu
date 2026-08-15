@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "../lib/supabase/client";
 import { getMannerTier } from "../lib/mannerTier";
 import ParticipantAvatar from "../components/ParticipantAvatar";
+import { useOnlinePresence } from "../lib/notifications";
 
 type FriendProfile = {
+  id: string;
   nickname: string;
   avatar: string | null;
   manner_score: number;
@@ -30,6 +33,8 @@ export default function KkanbuPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const { onlineUserIds } = useOnlinePresence();
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -38,14 +43,22 @@ export default function KkanbuPage() {
     if (!uid) return;
     setUserId(uid);
 
-    const { data: profile } = await supabase.from("profiles").select("friend_code").eq("id", uid).single();
+    const [{ data: profile }, { data: incomingRows }, { data: friendRows }] = await Promise.all([
+      supabase.from("profiles").select("friend_code").eq("id", uid).single(),
+      supabase
+        .from("friendships")
+        .select("id, requester:profiles!friendships_requester_id_fkey(id, nickname, avatar, manner_score, meetups_joined_count)")
+        .eq("addressee_id", uid)
+        .eq("status", "pending"),
+      supabase
+        .from("friendships")
+        .select(
+          "id, requester_id, addressee_id, requester:profiles!friendships_requester_id_fkey(id, nickname, avatar, manner_score, meetups_joined_count), addressee:profiles!friendships_addressee_id_fkey(id, nickname, avatar, manner_score, meetups_joined_count)"
+        )
+        .eq("status", "accepted")
+        .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`),
+    ]);
     setMyCode(profile?.friend_code ?? "");
-
-    const { data: incomingRows } = await supabase
-      .from("friendships")
-      .select("id, requester:profiles!friendships_requester_id_fkey(nickname, avatar, manner_score, meetups_joined_count)")
-      .eq("addressee_id", uid)
-      .eq("status", "pending");
 
     setIncoming(
       (incomingRows ?? []).map((row) => {
@@ -54,14 +67,6 @@ export default function KkanbuPage() {
         return { id: r.id, requester };
       })
     );
-
-    const { data: friendRows } = await supabase
-      .from("friendships")
-      .select(
-        "id, requester_id, addressee_id, requester:profiles!friendships_requester_id_fkey(nickname, avatar, manner_score, meetups_joined_count), addressee:profiles!friendships_addressee_id_fkey(nickname, avatar, manner_score, meetups_joined_count)"
-      )
-      .eq("status", "accepted")
-      .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`);
 
     setFriends(
       (friendRows ?? []).map((row) => {
@@ -186,25 +191,77 @@ export default function KkanbuPage() {
 
       <div className="card" style={{ marginTop: "16px" }}>
         <p style={{ fontWeight: 800, marginBottom: "12px" }}>내 깐부 목록 ({friends.length})</p>
+        {friends.length > 0 && (
+          <input
+            className="field-input"
+            style={{ marginBottom: "12px" }}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="깐부 이름으로 검색"
+          />
+        )}
         {friends.length === 0 ? (
           <p style={{ color: "var(--muted)", fontSize: "13px", textAlign: "center" }}>
             아직 깐부가 없어요. 오른쪽 위 + 버튼을 눌러서 깐부 코드로 추가해보세요!
           </p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {friends.map((f) => {
-              const tier = getMannerTier(f.profile.manner_score, f.profile.meetups_joined_count);
+          (() => {
+            const filtered = friends.filter((f) =>
+              f.profile.nickname.toLowerCase().includes(query.trim().toLowerCase())
+            );
+            if (filtered.length === 0) {
               return (
-                <div key={f.friendshipId} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <ParticipantAvatar avatarUrl={f.profile.avatar} tier={tier} size={40} />
-                  <div>
-                    <p style={{ fontWeight: 700 }}>{f.profile.nickname}</p>
-                    <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
-                  </div>
-                </div>
+                <p style={{ color: "var(--muted)", fontSize: "13px", textAlign: "center" }}>
+                  검색 결과가 없어요.
+                </p>
               );
-            })}
-          </div>
+            }
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {filtered.map((f) => {
+                  const tier = getMannerTier(f.profile.manner_score, f.profile.meetups_joined_count);
+                  const online = onlineUserIds.has(f.profile.id);
+                  return (
+                    <div key={f.friendshipId} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <Link
+                        href={`/profile/${f.profile.id}`}
+                        style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, textDecoration: "none", color: "inherit" }}
+                      >
+                        <div style={{ position: "relative" }}>
+                          <ParticipantAvatar avatarUrl={f.profile.avatar} tier={tier} size={40} />
+                          <span
+                            title={online ? "온라인" : "오프라인"}
+                            style={{
+                              position: "absolute",
+                              top: -2,
+                              left: -2,
+                              width: "10px",
+                              height: "10px",
+                              borderRadius: "50%",
+                              background: online ? "#22c55e" : "#9ca3af",
+                              border: "2px solid #fff",
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <p style={{ fontWeight: 700 }}>{f.profile.nickname}</p>
+                          <p style={{ fontSize: "12px", fontWeight: 700, color: tier.color }}>{tier.label}</p>
+                        </div>
+                      </Link>
+                      <Link
+                        href={`/dm/${f.profile.id}`}
+                        aria-label={`${f.profile.nickname}와 채팅하기`}
+                        className="btn btn-outline"
+                        style={{ padding: "8px 10px", fontSize: "14px" }}
+                      >
+                        💬
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
         )}
       </div>
 

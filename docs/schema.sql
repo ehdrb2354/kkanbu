@@ -115,7 +115,7 @@ create table public.meetups (
   location_lng double precision not null,
   scheduled_at timestamptz not null,
   capacity int not null default 4,
-  host_id uuid not null references public.profiles (id),
+  host_id uuid not null references public.profiles (id) on delete cascade,
   status text not null default 'open', -- 'open' | 'closed'
   created_at timestamptz not null default now()
 );
@@ -147,7 +147,7 @@ create policy "방장만 매칭 수정 가능"
 create table public.meetup_participants (
   id uuid primary key default gen_random_uuid(),
   meetup_id uuid not null references public.meetups (id) on delete cascade,
-  user_id uuid not null references public.profiles (id),
+  user_id uuid not null references public.profiles (id) on delete cascade,
   joined_at timestamptz not null default now(),
   unique (meetup_id, user_id)
 );
@@ -212,8 +212,8 @@ grant execute on function public.cancel_meetup(uuid) to authenticated;
 create table public.manner_ratings (
   id uuid primary key default gen_random_uuid(),
   meetup_id uuid not null references public.meetups (id) on delete cascade,
-  rater_id uuid not null references public.profiles (id),
-  ratee_id uuid not null references public.profiles (id),
+  rater_id uuid not null references public.profiles (id) on delete cascade,
+  ratee_id uuid not null references public.profiles (id) on delete cascade,
   delta int not null, -- 평가 슬라이더 0~100점을 scoreToDelta()로 환산한 값 (+10 ~ -15)
   tags text[] not null default '{}', -- 예: punctual, kind, fun / noshow, rude (app/lib/mannerTags.ts 참고)
   comment text not null default '', -- 한줄 후기 (선택 입력)
@@ -309,7 +309,7 @@ create trigger on_manner_rating_created
 create table public.meetup_messages (
   id uuid primary key default gen_random_uuid(),
   meetup_id uuid not null references public.meetups (id) on delete cascade,
-  sender_id uuid not null references public.profiles (id),
+  sender_id uuid not null references public.profiles (id) on delete cascade,
   content text not null,
   created_at timestamptz not null default now()
 );
@@ -368,7 +368,7 @@ group by pr.id;
 -- target_type/target_id로 유저·모임·채팅메시지를 폭넓게 신고할 수 있게 함 (외래키 대신 앱 코드에서 유효성 보장).
 create table public.reports (
   id uuid primary key default gen_random_uuid(),
-  reporter_id uuid not null references public.profiles (id),
+  reporter_id uuid not null references public.profiles (id) on delete cascade,
   target_type text not null check (target_type in ('user', 'meetup', 'message')),
   target_id uuid not null,
   reason text not null check (reason in ('inappropriate', 'abuse', 'spam', 'other')),
@@ -630,11 +630,118 @@ $$;
 
 grant execute on function public.respond_friend_request(uuid, boolean) to authenticated;
 
+-- 모임 멤버 목록처럼 상대 유저 id를 이미 알고 있는 곳(코드를 몰라도 되는 상황)에서 쓰는 버전.
+-- 로직은 send_friend_request(text)와 동일 (상대가 이미 나에게 요청을 보내둔 상태면 바로 수락 처리).
+create function public.send_friend_request_by_id(target_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  existing record;
+begin
+  if target_id = auth.uid() then
+    raise exception '자기 자신은 추가할 수 없어요';
+  end if;
+
+  select * into existing from public.friendships
+  where pair_key = least(auth.uid()::text, target_id::text) || '_' || greatest(auth.uid()::text, target_id::text);
+
+  if existing.id is null then
+    insert into public.friendships (requester_id, addressee_id, status)
+    values (auth.uid(), target_id, 'pending');
+    return 'requested';
+  elsif existing.status = 'accepted' then
+    return 'already_friends';
+  elsif existing.requester_id = auth.uid() then
+    return 'already_requested';
+  else
+    update public.friendships set status = 'accepted', responded_at = now() where id = existing.id;
+    return 'accepted';
+  end if;
+end;
+$$;
+
+grant execute on function public.send_friend_request_by_id(uuid) to authenticated;
+
+-- ── 깐부와의 1:1 채팅 (DM) ──────────────────────────────
+-- 깐부(친구) 사이에서만 주고받을 수 있는 개인 메시지. 모임 채팅(meetup_messages)과 달리
+-- 자동폭파 없음 — 친구 관계가 유지되는 동안 대화 기록이 계속 남는다.
+create table public.direct_messages (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid not null references public.profiles (id) on delete cascade,
+  receiver_id uuid not null references public.profiles (id) on delete cascade,
+  content text not null,
+  created_at timestamptz not null default now(),
+  pair_key text generated always as (
+    least(sender_id::text, receiver_id::text) || '_' || greatest(sender_id::text, receiver_id::text)
+  ) stored,
+  constraint direct_messages_no_self check (sender_id <> receiver_id)
+);
+
+create index direct_messages_pair_idx on public.direct_messages (pair_key, created_at);
+
+alter table public.direct_messages enable row level security;
+
+create policy "본인이 보내거나 받은 메시지만 조회 가능"
+  on public.direct_messages for select
+  to authenticated
+  using (auth.uid() = sender_id or auth.uid() = receiver_id);
+
+create policy "깐부 사이에서만, 본인 명의로만 메시지 전송 가능"
+  on public.direct_messages for insert
+  to authenticated
+  with check (
+    auth.uid() = sender_id
+    and exists (
+      select 1 from public.friendships f
+      where f.status = 'accepted'
+        and f.pair_key = least(sender_id::text, receiver_id::text) || '_' || greatest(sender_id::text, receiver_id::text)
+    )
+  );
+
+-- ── direct_messages insert마다 푸시 발송 API를 호출하는 트리거 ────
+-- meetup_messages와 같은 방식(pg_net) — <YOUR_DEPLOY_URL>과 <YOUR_PUSH_WEBHOOK_SECRET>을
+-- 실제 값으로 바꿔서 SQL Editor에서 실행하세요.
+create or replace function public.notify_new_dm_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform net.http_post(
+    url := '<YOUR_DEPLOY_URL>/api/push/send',
+    body := jsonb_build_object(
+      'type', 'INSERT',
+      'table', 'direct_messages',
+      'record', jsonb_build_object(
+        'id', new.id,
+        'sender_id', new.sender_id,
+        'receiver_id', new.receiver_id,
+        'content', new.content
+      )
+    ),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer <YOUR_PUSH_WEBHOOK_SECRET>'
+    )
+  );
+  return new;
+end;
+$$;
+
+create trigger on_direct_message_push
+  after insert on public.direct_messages
+  for each row execute function public.notify_new_dm_message();
+
 -- ── Realtime: 참가자 수 / 채팅 실시간 반영 ─────────────────
 alter publication supabase_realtime add table public.meetups;
 alter publication supabase_realtime add table public.meetup_participants;
 alter publication supabase_realtime add table public.meetup_messages;
 alter publication supabase_realtime add table public.friendships;
+alter publication supabase_realtime add table public.direct_messages;
 
 -- ── (선택) 깐부톡 서버단 자동 폭파 — pg_cron ───────────────
 -- 앱이 채팅을 열 때마다 "활동 시작 + 5시간이 지난 채팅"을 클라이언트에서도 삭제하지만,
@@ -770,3 +877,47 @@ alter publication supabase_realtime add table public.friendships;
 -- (profiles.friend_code 컬럼 추가 ~ friendships 테이블 ~ 함수 2개 ~ grant execute 2줄과,
 --  Realtime 섹션의 "alter publication supabase_realtime add table public.friendships;" 한 줄)만
 -- 골라서 SQL Editor에 추가로 실행하세요.
+--
+-- 모임 멤버 목록에서 (코드 없이) 바로 친구 추가하는 기능을 새로 추가하는 경우, 위의
+-- "깐부(친구) 코드 & 친구 관계" 섹션 맨 아래에 있는 send_friend_request_by_id() 함수와
+-- 바로 다음 줄의 grant execute 한 줄만 골라서 SQL Editor에 추가로 실행하세요.
+--
+-- 깐부와의 1:1 채팅(DM) 기능을 새로 추가하는 경우, 위의 "깐부와의 1:1 채팅 (DM)" 섹션
+-- (direct_messages 테이블 ~ 정책 2개 ~ notify_new_dm_message() 함수 ~ 트리거)과,
+-- Realtime 섹션의 "alter publication supabase_realtime add table public.direct_messages;" 한 줄을
+-- 골라서 SQL Editor에 추가로 실행하세요. notify_new_dm_message() 안의 <YOUR_DEPLOY_URL>과
+-- <YOUR_PUSH_WEBHOOK_SECRET>은 meetup_messages 트리거 때 넣었던 값과 동일하게 채우면 됩니다.
+-- 그 다음 Supabase 대시보드 → Database → Webhooks 에서 direct_messages insert 웹훅도
+-- /api/push/send 로 추가 설정하세요(이미 pg_net 트리거로 대체했다면 이 단계는 생략).
+--
+-- 마이페이지 설정에서 "회원 탈퇴"(계정 삭제) 기능을 새로 추가하는 경우, 아래 SQL을 실행해서
+-- profiles를 참조하는 나머지 외래키에도 on delete cascade를 걸어주세요. 이게 없으면 모임을
+-- 만들었거나(host_id) 참가했거나(meetup_participants) 매너평가를 주고받았거나(manner_ratings)
+-- 채팅을 보냈거나(meetup_messages) 신고를 한 적(reports) 있는 유저는 탈퇴 시 DB 에러로 실패합니다.
+--
+-- alter table public.meetups drop constraint meetups_host_id_fkey;
+-- alter table public.meetups add constraint meetups_host_id_fkey
+--   foreign key (host_id) references public.profiles (id) on delete cascade;
+--
+-- alter table public.meetup_participants drop constraint meetup_participants_user_id_fkey;
+-- alter table public.meetup_participants add constraint meetup_participants_user_id_fkey
+--   foreign key (user_id) references public.profiles (id) on delete cascade;
+--
+-- alter table public.manner_ratings drop constraint manner_ratings_rater_id_fkey;
+-- alter table public.manner_ratings add constraint manner_ratings_rater_id_fkey
+--   foreign key (rater_id) references public.profiles (id) on delete cascade;
+--
+-- alter table public.manner_ratings drop constraint manner_ratings_ratee_id_fkey;
+-- alter table public.manner_ratings add constraint manner_ratings_ratee_id_fkey
+--   foreign key (ratee_id) references public.profiles (id) on delete cascade;
+--
+-- alter table public.meetup_messages drop constraint meetup_messages_sender_id_fkey;
+-- alter table public.meetup_messages add constraint meetup_messages_sender_id_fkey
+--   foreign key (sender_id) references public.profiles (id) on delete cascade;
+--
+-- alter table public.reports drop constraint reports_reporter_id_fkey;
+-- alter table public.reports add constraint reports_reporter_id_fkey
+--   foreign key (reporter_id) references public.profiles (id) on delete cascade;
+--
+-- 그리고 .env(.local)에 SUPABASE_SERVICE_ROLE_KEY가 이미 들어있어야 해요(푸시 알림 기능 설정할 때
+-- 넣었던 것과 동일한 값 — app/api/account/delete/route.ts가 이 키로 auth.users를 직접 삭제합니다).

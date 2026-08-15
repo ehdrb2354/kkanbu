@@ -5,8 +5,10 @@ import Link from "next/link";
 import { createClient } from "../lib/supabase/client";
 import { getCategory } from "../lib/categories";
 import { getChatDestroyAt, formatCountdown, isChatDestroyed } from "../lib/chatLifecycle";
+import { getMannerTier } from "../lib/mannerTier";
 import { useUnreadChats } from "../lib/notifications";
 import NotificationPermissionBanner from "../components/NotificationPermissionBanner";
+import ParticipantAvatar from "../components/ParticipantAvatar";
 
 type ChatRoom = {
   id: string;
@@ -25,11 +27,22 @@ type MeetupRelation = {
   status: string;
 };
 
+type DmThread = {
+  friendId: string;
+  nickname: string;
+  avatar: string | null;
+  score: number;
+  meetupsJoined: number;
+  lastContent: string;
+  lastAt: string;
+};
+
 export default function ChatsPage() {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
+  const [dmThreads, setDmThreads] = useState<DmThread[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
-  const { unreadMeetupIds } = useUnreadChats();
+  const { unreadMeetupIds, unreadDmSenderIds } = useUnreadChats();
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -37,10 +50,18 @@ export default function ChatsPage() {
     const user = userData.user;
     if (!user) return;
 
-    const { data } = await supabase
-      .from("meetup_participants")
-      .select("meetup:meetups(id, title, category, location_text, scheduled_at, status)")
-      .eq("user_id", user.id);
+    const [{ data }, { data: dmRows }] = await Promise.all([
+      supabase
+        .from("meetup_participants")
+        .select("meetup:meetups(id, title, category, location_text, scheduled_at, status)")
+        .eq("user_id", user.id),
+      supabase
+        .from("direct_messages")
+        .select("sender_id, receiver_id, content, created_at")
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order("created_at", { ascending: false })
+        .limit(300),
+    ]);
 
     if (data) {
       const mapped = data
@@ -61,6 +82,40 @@ export default function ChatsPage() {
         .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
       setRooms(mapped);
     }
+
+    if (dmRows && dmRows.length > 0) {
+      const seen = new Set<string>();
+      const latestByFriend: { friendId: string; lastContent: string; lastAt: string }[] = [];
+      dmRows.forEach((row) => {
+        const friendId = row.sender_id === user.id ? row.receiver_id : row.sender_id;
+        if (seen.has(friendId)) return;
+        seen.add(friendId);
+        latestByFriend.push({ friendId, lastContent: row.content, lastAt: row.created_at });
+      });
+
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id, nickname, avatar, manner_score, meetups_joined_count")
+        .in("id", latestByFriend.map((t) => t.friendId));
+
+      const profileById = new Map((profileRows ?? []).map((p) => [p.id, p]));
+
+      setDmThreads(
+        latestByFriend.map((t) => {
+          const profile = profileById.get(t.friendId);
+          return {
+            friendId: t.friendId,
+            nickname: profile?.nickname ?? "알 수 없음",
+            avatar: profile?.avatar ?? null,
+            score: profile?.manner_score ?? 0,
+            meetupsJoined: profile?.meetups_joined_count ?? 0,
+            lastContent: t.lastContent,
+            lastAt: t.lastAt,
+          };
+        })
+      );
+    }
+
     setLoading(false);
   }, []);
 
@@ -83,6 +138,7 @@ export default function ChatsPage() {
 
       <NotificationPermissionBanner />
 
+      <p style={{ fontWeight: 800, marginBottom: "10px", fontSize: "14px" }}>모임 채팅</p>
       {rooms.length === 0 && (
         <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>
           <p>아직 열려있는 깐부톡이 없어요.</p>
@@ -115,6 +171,48 @@ export default function ChatsPage() {
           );
         })}
       </div>
+
+      <p style={{ fontWeight: 800, marginBottom: "10px", marginTop: "24px", fontSize: "14px" }}>친구와의 채팅</p>
+      {dmThreads.length === 0 ? (
+        <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>
+          <p>아직 깐부와 나눈 대화가 없어요.</p>
+          <p style={{ marginTop: "6px", fontSize: "13px" }}>깐부 목록에서 💬 버튼을 눌러 대화를 시작해보세요!</p>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {dmThreads.map((t) => {
+            const tier = getMannerTier(t.score, t.meetupsJoined);
+            return (
+              <Link
+                key={t.friendId}
+                href={`/dm/${t.friendId}`}
+                className="card"
+                style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none", color: "inherit" }}
+              >
+                <ParticipantAvatar avatarUrl={t.avatar} tier={tier} size={40} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p style={{ fontWeight: 800, fontSize: "15px" }}>
+                    {unreadDmSenderIds.has(t.friendId) && <span className="chat-room-dot" />}
+                    {t.nickname}
+                  </p>
+                  <p
+                    style={{
+                      color: "var(--muted)",
+                      fontSize: "13px",
+                      marginTop: "4px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {t.lastContent}
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </main>
   );
 }

@@ -16,7 +16,7 @@ const TABS = [
 
 export default function Nav() {
   const pathname = usePathname();
-  const { unreadMeetupIds } = useUnreadChats();
+  const { unreadMeetupIds, unreadDmSenderIds } = useUnreadChats();
 
   if (pathname === "/login" || pathname === "/signup") return null;
 
@@ -43,7 +43,9 @@ export default function Nav() {
           >
             <span style={{ position: "relative" }}>
               <tab.Icon size={22} />
-              {tab.href === "/chats" && unreadMeetupIds.size > 0 && <span className="bottom-nav-dot" />}
+              {tab.href === "/chats" && (unreadMeetupIds.size > 0 || unreadDmSenderIds.size > 0) && (
+                <span className="bottom-nav-dot" />
+              )}
             </span>
             <span>{tab.label}</span>
           </Link>
