@@ -42,14 +42,19 @@ function NewMeetupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category") ?? CATEGORIES[0].key;
+  const initialLocationText = searchParams.get("locationText") ?? "";
+  const initialLat = searchParams.get("lat");
+  const initialLng = searchParams.get("lng");
+  const initialPickedLocation =
+    initialLat && initialLng ? { lat: Number(initialLat), lng: Number(initialLng) } : null;
 
   const [categoryKey, setCategoryKey] = useState(initialCategory);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [locationText, setLocationText] = useState("");
+  const [locationText, setLocationText] = useState(initialLocationText);
   const [scheduledAt, setScheduledAt] = useState("");
   const [capacity, setCapacity] = useState(4);
-  const [pickedLocation, setPickedLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [pickedLocation, setPickedLocation] = useState<{ lat: number; lng: number } | null>(initialPickedLocation);
   const [mapPickerError, setMapPickerError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -88,6 +93,13 @@ function NewMeetupForm() {
           });
           mapRef.current = map;
 
+          if (initialPickedLocation) {
+            markerRef.current = new kakao.maps.Marker({
+              position: new kakao.maps.LatLng(initialPickedLocation.lat, initialPickedLocation.lng),
+              map,
+            });
+          }
+
           kakao.maps.event.addListener(map, "click", (e: any) => {
             const lat = e.latLng.getLat();
             const lng = e.latLng.getLng();
@@ -101,7 +113,9 @@ function NewMeetupForm() {
           });
         };
 
-        if (navigator.geolocation) {
+        if (initialPickedLocation) {
+          proceed(initialPickedLocation);
+        } else if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (pos) => proceed({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
             () => proceed(DEFAULT_CENTER),

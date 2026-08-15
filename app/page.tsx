@@ -393,6 +393,15 @@ export default function HomeMapPage() {
             </button>
             <p style={{ fontWeight: 800, fontSize: "15px" }}>🔍 {searchMarker.name}</p>
             <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "6px" }}>📍 {searchMarker.address}</p>
+            <Link
+              href={`/meetup/new?locationText=${encodeURIComponent(searchMarker.name)}&lat=${searchMarker.lat}&lng=${searchMarker.lng}${
+                selectedCategory ? `&category=${selectedCategory}` : ""
+              }`}
+              className="btn btn-primary"
+              style={{ width: "100%", marginTop: "12px" }}
+            >
+              📍 여기서 모임 만들기
+            </Link>
           </div>
         )}
 
